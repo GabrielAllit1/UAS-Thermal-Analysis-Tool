@@ -1,5 +1,3 @@
-import numpy as np
-
 from uas_thermal.inspections.models import Confidence
 from uas_thermal.thermal.anomaly_detection import DetectionConfig, analyze_temperature
 from uas_thermal.thermal.validation import synthetic_cases
