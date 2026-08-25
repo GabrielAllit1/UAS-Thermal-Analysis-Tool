@@ -6,8 +6,10 @@ from ctypes import (
     POINTER,
     Structure,
     byref,
+    c_char,
     c_float,
     c_int32,
+    c_uint32,
     c_uint8,
     c_void_p,
     cdll,
@@ -71,6 +73,11 @@ class _DirpMeasurementParams(Structure):
         ("emissivity", c_float),
         ("reflection", c_float),
     ]
+
+
+class _DirpApiVersion(Structure):
+    _pack_ = 1
+    _fields_ = [("api", c_uint32), ("magic", c_char * 8)]
 
 
 class DjiDirpAdapter(ThermalSensorAdapter):
@@ -169,6 +176,53 @@ class DjiDirpAdapter(ThermalSensorAdapter):
             function.restype = c_int32
         return functions
 
+    def sdk_diagnostics(self) -> dict[str, Any]:
+        """Return non-secret runtime diagnostics without requiring an R-JPEG handle."""
+        library_path = self.sdk_library()
+        result: dict[str, Any] = {
+            "sdk_library": None if library_path is None else str(library_path),
+            "sdk_api_version": None,
+            "sdk_magic": None,
+        }
+        if library_path is None:
+            return result
+
+        try:
+            lib = self._load_library(library_path)
+        except AdapterUnavailableError as exc:
+            result["sdk_load_error"] = str(exc)
+            return result
+
+        get_api_version = getattr(lib, "dirp_get_api_version", None)
+        if get_api_version is None:
+            result["sdk_api_version_error"] = "dirp_get_api_version export not found"
+            return result
+
+        get_api_version.argtypes = [POINTER(_DirpApiVersion)]
+        get_api_version.restype = c_int32
+        version = _DirpApiVersion()
+        ret = int(get_api_version(byref(version)))
+        if ret != DIRP_SUCCESS:
+            result["sdk_api_version_error"] = DIRP_ERRORS.get(ret, f"return code {ret}")
+            return result
+
+        result["sdk_api_version"] = int(version.api)
+        result["sdk_magic"] = bytes(version.magic).split(b"\x00", 1)[0].decode(
+            "ascii", errors="replace"
+        )
+        return result
+
+    @staticmethod
+    def source_diagnostics(path: Path) -> dict[str, Any]:
+        """Return cheap source facts useful when DIRP rejects a JPEG."""
+        data = path.read_bytes()
+        name = path.name.lower()
+        return {
+            "file_size_bytes": len(data),
+            "jpeg_signature": len(data) >= 4 and data[:2] == b"\xff\xd8" and data[-2:] == b"\xff\xd9",
+            "export_like_filename": "_export_" in name or "export-" in name,
+        }
+
     @staticmethod
     def _measurement_params(calibration: ThermalCalibration) -> _DirpMeasurementParams:
         humidity_percent = calibration.relative_humidity * 100.0
@@ -211,14 +265,25 @@ class DjiDirpAdapter(ThermalSensorAdapter):
         jpeg_buffer = (c_uint8 * len(jpeg_bytes)).from_buffer_copy(jpeg_bytes)
         handle = c_void_p()
 
-        self._check(
+        create_ret = int(
             functions["dirp_create_from_rjpeg"](
                 jpeg_buffer,
                 c_int32(len(jpeg_bytes)),
                 byref(handle),
-            ),
-            "create R-JPEG handle",
+            )
         )
+        if create_ret != DIRP_SUCCESS:
+            detail = DIRP_ERRORS.get(create_ret, f"unknown return code {create_ret}")
+            if create_ret == -7:
+                raise AdapterUnavailableError(
+                    "DJI DIRP create R-JPEG handle failed (-7: R-JPEG parse failed). "
+                    "The runtime loaded correctly but rejected this file as a compatible radiometric "
+                    "R-JPEG. Use the original camera R-JPEG rather than an exported/derived JPEG, "
+                    "or install a DJI Thermal SDK release compatible with the camera/firmware."
+                )
+            raise AdapterUnavailableError(
+                f"DJI DIRP create R-JPEG handle failed ({create_ret}: {detail})"
+            )
         if not handle.value:
             raise AdapterUnavailableError("DJI DIRP created a null R-JPEG handle")
 
@@ -269,9 +334,7 @@ class DjiDirpAdapter(ThermalSensorAdapter):
                 ),
                 "render pseudo-color image",
             )
-            display_rgb = (
-                np.ctypeslib.as_array(rgb_buffer).reshape(height, width, 3).copy()
-            )
+            display_rgb = np.ctypeslib.as_array(rgb_buffer).reshape(height, width, 3).copy()
 
             return ThermalFrame(
                 temperature_c=temperature_c,
