@@ -8,7 +8,7 @@ from uas_thermal.sensors.geotiff_tiles import TiledGeoTiffReader
 from uas_thermal.thermal.calibration import ThermalCalibration
 
 rasterio = pytest.importorskip("rasterio")
-from rasterio.transform import from_origin
+from_origin = pytest.importorskip("rasterio.transform").from_origin
 
 
 def _write_thermal(path: Path, values: np.ndarray) -> None:
