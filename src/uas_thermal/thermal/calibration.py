@@ -9,6 +9,7 @@ class ThermalCalibration:
     distance_m: float = 5.0
     relative_humidity: float = 0.50
     reflected_temperature_c: float = 20.0
+    ambient_temperature_c: float | None = None
 
     def __post_init__(self) -> None:
         if not 0.1 <= self.emissivity <= 1.0:
@@ -19,3 +20,6 @@ class ThermalCalibration:
             raise ValueError("relative_humidity must be between 0.0 and 1.0")
         if not -100.0 <= self.reflected_temperature_c <= 1000.0:
             raise ValueError("reflected_temperature_c is outside supported bounds")
+        if self.ambient_temperature_c is not None:
+            if not -100.0 <= self.ambient_temperature_c <= 1000.0:
+                raise ValueError("ambient_temperature_c is outside supported bounds")
