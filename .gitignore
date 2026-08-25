@@ -1,0 +1,62 @@
+# Secrets / licensing
+secure_key.dat
+license_data.dat
+last_check.dat
+
+# Packaged applications
+ThermalAnalysis.exe
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Build output
+build/
+dist/
+*.spec
+
+# Generated analysis/report artifacts
+temp_*
+*.log
+Thermal_Analysis_*.pdf
+Thermal_Analysis_*.csv
+GeoTIFF_Anomalies.csv
+Batch_Anomalies.csv
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Private licensing records
+LicenseTools/license_key_log.csv
+
+# ============================================================
+# PRIVATE / INTERNAL LICENSING
+# ============================================================
+LicenseTools/license_key_log.csv
+LicenseTools/generate_license_key.py
+
+# ============================================================
+# CUSTOMER / INSPECTION SOURCE DATA
+# Keep real-world datasets outside source control.
+# Sanitized samples can be added later under samples/.
+# ============================================================
+Thermal_Images/Uploads/
+
+# ============================================================
+# THIRD-PARTY / VENDOR SDK BINARIES
+# Reintroduce later through documented vendor adapters/installers.
+# ============================================================
+*.dll
+*.lib
+dirp_api.h
+dirp_wrapper.h
+libv_list.ini
