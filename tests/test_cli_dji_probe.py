@@ -17,9 +17,26 @@ def test_dji_probe_parser_defaults() -> None:
     assert args.palette == "IRONRED"
 
 
+def test_geotiff_probe_parser_defaults() -> None:
+    args = build_parser().parse_args(["geotiff-probe", "sample.tif"])
+    assert args.command == "geotiff-probe"
+    assert args.source == Path("sample.tif")
+    assert args.unit == "auto"
+    assert args.scale == 1.0
+    assert args.offset == 0.0
+
+
 def test_dji_probe_missing_source_returns_machine_readable_error(tmp_path, capsys) -> None:
     missing = tmp_path / "missing.jpg"
     assert main(["dji-probe", str(missing)]) == 2
+    payload = json.loads(capsys.readouterr().err)
+    assert payload["ok"] is False
+    assert "source not found" in payload["error"]
+
+
+def test_geotiff_probe_missing_source_returns_machine_readable_error(tmp_path, capsys) -> None:
+    missing = tmp_path / "missing.tif"
+    assert main(["geotiff-probe", str(missing)]) == 2
     payload = json.loads(capsys.readouterr().err)
     assert payload["ok"] is False
     assert "source not found" in payload["error"]
