@@ -104,7 +104,9 @@ def create_workspace_window(session):
     action_row.addWidget(advanced)
     start_layout.addLayout(action_row)
 
-    privacy = QLabel("LOCAL-FIRST · Your source data is read in place; Autopilot does not require a cloud upload.")
+    privacy = QLabel(
+        "LOCAL-FIRST · Your source data is read in place; Autopilot does not require a cloud upload."
+    )
     privacy.setObjectName("muted")
     start_layout.addWidget(privacy)
 
@@ -225,6 +227,9 @@ def create_workspace_window(session):
             choose_files.setEnabled(True)
             return
 
+        window.autopilot_last_result = None
+        open_delivery.setEnabled(False)
+
         # A new one-click mission owns its project context. The operator can enrich the metadata later,
         # but no project-creation form is required to get a valid processing run started.
         session.project = Project(
@@ -339,6 +344,15 @@ def create_workspace_window(session):
                 f"client/engineering package: {result.deliverable_dir}"
             )
             open_delivery.setEnabled(True)
+            choose_folder.setEnabled(True)
+            choose_files.setEnabled(True)
+            return
+        if worker is not None and not worker.isRunning() and not choose_folder.isEnabled():
+            mission_state.setText("AUTOPILOT STOPPED · REVIEW THE MISSION TELEMETRY")
+            mission_detail.setText(
+                "The mission did not produce a deliverable. Autopilot preserved the source data and "
+                "reported the blocking radiometric/processing error in the telemetry panel."
+            )
             choose_folder.setEnabled(True)
             choose_files.setEnabled(True)
 
