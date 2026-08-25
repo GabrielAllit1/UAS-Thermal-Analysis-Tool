@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Callable
 
 from ..inspections.deduplication import deduplicate_findings
 from ..inspections.models import Finding, InspectionSummary
@@ -55,11 +55,13 @@ class InspectionRun:
     summary: InspectionSummary = field(default_factory=InspectionSummary)
     events: list[ProcessingEvent] = field(default_factory=list)
     package_dir: Path | None = None
+    status: ProcessingStage = ProcessingStage.QUEUED
 
     def as_dict(self) -> dict[str, object]:
         return {
             "project": self.project.report_metadata(),
             "profile": self.profile.as_dict(),
+            "status": self.status.value,
             "summary": asdict(self.summary),
             "failures": [asdict(item) for item in self.failures],
             "canonical_finding_ids": [item.finding_id for item in self.canonical_findings],
@@ -90,7 +92,13 @@ class AutonomousInspectionOrchestrator:
         run = InspectionRun(project=project, profile=active_profile)
         total = len(sources)
 
-        def emit(stage: ProcessingStage, message: str, completed: int = 0, source: str = "") -> None:
+        def emit(
+            stage: ProcessingStage,
+            message: str,
+            completed: int = 0,
+            source: str = "",
+        ) -> None:
+            run.status = stage
             event = ProcessingEvent(stage, message, completed, total, source)
             run.events.append(event)
             if on_event:
@@ -101,12 +109,19 @@ class AutonomousInspectionOrchestrator:
             emit(ProcessingStage.FAILED, "No thermal sources were supplied")
             return run
 
+        canceled = False
         for index, source in enumerate(sources, 1):
             if is_cancelled and is_cancelled():
+                canceled = True
                 emit(ProcessingStage.CANCELED, "Inspection analysis canceled", index - 1)
                 break
             source_path = Path(source)
-            emit(ProcessingStage.VALIDATING, "Validating radiometric source", index - 1, str(source_path))
+            emit(
+                ProcessingStage.VALIDATING,
+                "Validating radiometric source",
+                index - 1,
+                str(source_path),
+            )
             emit(
                 ProcessingStage.EXTRACTING_RADIOMETRY,
                 "Extracting normalized temperature data",
@@ -114,7 +129,12 @@ class AutonomousInspectionOrchestrator:
                 str(source_path),
             )
             try:
-                emit(ProcessingStage.DETECTING, "Detecting contextual thermal candidates", index - 1, str(source_path))
+                emit(
+                    ProcessingStage.DETECTING,
+                    "Detecting contextual thermal candidates",
+                    index - 1,
+                    str(source_path),
+                )
                 artifact = self.workflow.analyze_artifact(
                     source_path,
                     calibration=calibration,
@@ -123,9 +143,16 @@ class AutonomousInspectionOrchestrator:
                     profile=active_profile,
                 )
             except Exception as exc:
-                run.failures.append(SourceFailure(str(source_path), type(exc).__name__, str(exc)))
+                run.failures.append(
+                    SourceFailure(str(source_path), type(exc).__name__, str(exc))
+                )
                 continue
-            emit(ProcessingStage.CHARACTERIZING, "Characterizing accepted findings", index, str(source_path))
+            emit(
+                ProcessingStage.CHARACTERIZING,
+                "Characterizing accepted findings",
+                index,
+                str(source_path),
+            )
             for finding_index, finding in enumerate(artifact.result.findings, 1):
                 observation_id = f"OBS-{index:05d}-{finding_index:03d}"
                 finding.finding_id = observation_id
@@ -138,9 +165,18 @@ class AutonomousInspectionOrchestrator:
             for artifact in run.artifacts
             for finding in artifact.result.findings
         ]
-        emit(ProcessingStage.GEOLOCATING, "Geospatial evidence assigned where source authority permits", len(run.artifacts))
-        emit(ProcessingStage.DEDUPLICATING, "Clustering probable cross-frame duplicates", len(run.artifacts))
-        run.canonical_findings = deduplicate_findings(observations)
+        if observations:
+            emit(
+                ProcessingStage.GEOLOCATING,
+                "Geospatial evidence assigned where source authority permits",
+                len(run.artifacts),
+            )
+            emit(
+                ProcessingStage.DEDUPLICATING,
+                "Clustering probable cross-frame duplicates",
+                len(run.artifacts),
+            )
+            run.canonical_findings = deduplicate_findings(observations)
 
         for finding in run.canonical_findings:
             finding.inspection_id = project.inspection_id
@@ -149,12 +185,19 @@ class AutonomousInspectionOrchestrator:
         run.summary = InspectionSummary(
             images_discovered=total,
             images_accepted=len(run.artifacts),
-            images_warned=sum(bool(artifact.result.quality.get("warnings")) for artifact in run.artifacts),
+            images_warned=sum(
+                bool(artifact.result.quality.get("warnings"))
+                for artifact in run.artifacts
+            ),
             images_rejected=len(run.failures),
             observations=len(observations),
             canonical_findings=len(run.canonical_findings),
-            critical=sum(item.severity.value == "critical" for item in run.canonical_findings),
-            moderate=sum(item.severity.value == "moderate" for item in run.canonical_findings),
+            critical=sum(
+                item.severity.value == "critical" for item in run.canonical_findings
+            ),
+            moderate=sum(
+                item.severity.value == "moderate" for item in run.canonical_findings
+            ),
             minor=sum(item.severity.value == "minor" for item in run.canonical_findings),
             highest_temperature_c=max(
                 (item.max_temperature_c for item in run.canonical_findings),
@@ -166,17 +209,36 @@ class AutonomousInspectionOrchestrator:
             ),
         )
 
+        if canceled:
+            run.status = ProcessingStage.CANCELED
+            return run
+
         if output_dir is not None and run.artifacts:
-            emit(ProcessingStage.RENDERING, "Rendering finding annotations and evidence plates", len(run.artifacts))
+            emit(
+                ProcessingStage.RENDERING,
+                "Rendering finding annotations and evidence plates",
+                len(run.artifacts),
+            )
             from ..reporting.package import write_inspection_package
 
-            emit(ProcessingStage.GENERATING_REPORT, "Generating inspection deliverables", len(run.artifacts))
+            emit(
+                ProcessingStage.GENERATING_REPORT,
+                "Generating inspection deliverables",
+                len(run.artifacts),
+            )
             run.package_dir = write_inspection_package(run, output_dir)
-            emit(ProcessingStage.VERIFYING_OUTPUT, "Verifying output manifest and checksums", len(run.artifacts))
+            emit(
+                ProcessingStage.VERIFYING_OUTPUT,
+                "Verifying output manifest and checksums",
+                len(run.artifacts),
+            )
 
         emit(
             ProcessingStage.COMPLETE,
-            f"Inspection complete: {len(run.canonical_findings)} canonical finding(s), {len(run.failures)} rejected source(s)",
+            (
+                f"Inspection complete: {len(run.canonical_findings)} canonical finding(s), "
+                f"{len(run.failures)} rejected source(s)"
+            ),
             len(run.artifacts),
         )
         return run
