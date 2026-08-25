@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Callable
 
 from .autopilot import RuntimeSnapshot, scan_runtime
 
