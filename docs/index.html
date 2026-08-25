@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Vendor-neutral UAS thermal inspection and geospatial analytics platform." />
+  <title>UAS Thermal Analysis</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #081017; color: #e7f2f7; }
+    main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+    header { padding: 84px 0 52px; border-bottom: 1px solid #1d3541; }
+    .eyebrow { color: #70d7ff; text-transform: uppercase; letter-spacing: .16em; font-weight: 700; font-size: .8rem; }
+    h1 { max-width: 900px; margin: 12px 0 18px; font-size: clamp(2.5rem, 7vw, 5.7rem); line-height: .98; }
+    .lede { max-width: 760px; color: #a9bfca; font-size: 1.2rem; line-height: 1.65; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 42px 0; }
+    .card { padding: 22px; background: #0d1921; border: 1px solid #1b3440; border-radius: 14px; }
+    .card h2 { margin-top: 0; font-size: 1.05rem; }
+    .card p { margin-bottom: 0; color: #9db4bf; line-height: 1.55; }
+    section { padding: 22px 0 58px; }
+    pre { overflow: auto; padding: 20px; background: #071016; border: 1px solid #1b3440; border-radius: 14px; color: #b8e8fa; }
+    .status { display: inline-block; margin-top: 22px; padding: 9px 12px; border-radius: 999px; background: #102833; color: #8de0ff; }
+    footer { padding: 34px 0 50px; color: #77919d; border-top: 1px solid #1d3541; }
+    @media (max-width: 760px) { header { padding-top: 56px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Thermal intelligence without vendor lock-in</div>
+    <h1>UAS Thermal Analysis</h1>
+    <p class="lede">A modular inspection platform for radiometric imagery, thermal anomaly detection, geospatial mapping, and inspection-ready reporting across UAS, handheld, and fixed thermal sensors.</p>
+    <span class="status">Active modernization · v0.2 architecture</span>
+  </header>
+
+  <div class="grid">
+    <article class="card"><h2>Sensor-neutral core</h2><p>Normalize vendor formats into a common ThermalFrame so downstream analytics remain portable.</p></article>
+    <article class="card"><h2>Thermal analytics</h2><p>Calibration, statistics, delta-based anomaly detection, severity policy, and reusable findings.</p></article>
+    <article class="card"><h2>Geospatial deliverables</h2><p>GeoTIFF, CRS, KML, world-file transforms, CSV, KML, PDF, and future GIS export paths.</p></article>
+  </div>
+
+  <section>
+    <h2>Architecture</h2>
+    <pre>Source imagery
+      ↓
+Sensor adapter registry
+      ↓
+ThermalFrame
+      ↓
+Thermal analytics
+      ↓
+Inspection findings
+      ↓
+Geospatial enrichment
+      ↓
+CSV · KML · PDF · GIS</pre>
+  </section>
+
+  <footer>UAS Thermal Analysis · SALT19 · Vendor-specific support is enabled only through tested adapters.</footer>
+</main>
+</body>
+</html>
