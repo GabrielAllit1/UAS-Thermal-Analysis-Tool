@@ -94,7 +94,7 @@ class ProcessingHistoryStore:
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
                 record = ProcessingHistoryRecord(**payload)
-            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            except (OSError, ValueError, TypeError):
                 continue
             if project_id and record.project_id != project_id:
                 continue
