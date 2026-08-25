@@ -8,6 +8,7 @@ from typing import Any
 from ..ai.enrichment import enrich_finding
 from ..ai.ollama import OllamaProvider
 from ..ai.provider import LocalAIModel
+from ..ai.router import select_model
 from ..inspections.profiles import InspectionProfile, get_profile
 from ..orthomosaic import OrthomosaicRequest, OrthomosaicResult, OrthomosaicService
 from ..platform.config import AppConfig
@@ -102,8 +103,8 @@ class UniversalThermalProcessor:
                 if model.name == mode:
                     return model
             return None
-        vision = [model for model in models if model.supports_vision]
-        return vision[0] if vision else models[0]
+        task = "vision_review" if any(model.supports_vision for model in models) else "engineering_narrative"
+        return select_model(models, task)
 
     def _enrich(
         self,
@@ -128,6 +129,9 @@ class UniversalThermalProcessor:
         if selected is None:
             warnings.append(f"Requested local AI model {mode!r} is not installed")
             return provider.name, "", 0
+        if on_event and mode == "auto":
+            task = "vision evidence review" if selected.supports_vision else "engineering narrative"
+            on_event(f"AI router selected {selected.name} for {task}")
 
         artifact_by_source = {
             str(Path(artifact.result.source)): artifact
