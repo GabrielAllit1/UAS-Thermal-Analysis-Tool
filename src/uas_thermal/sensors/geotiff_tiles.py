@@ -11,6 +11,7 @@ from .base import AdapterUnavailableError, ThermalFrame
 from .generic import (
     GenericGeoTiffAdapter,
     _encoding,
+    _infer_unit,
     _radiometric_classification,
     _sidecar_metadata,
     masked_band_to_float,
@@ -60,6 +61,26 @@ class GeoTiffSourceContext:
     metadata: dict[str, object]
 
 
+def _resolved_encoding(source, tags, adapter: GenericGeoTiffAdapter) -> tuple[float, float, str]:
+    scale, offset, unit = _encoding(
+        source,
+        tags,
+        adapter.scale,
+        adapter.offset,
+        adapter.unit,
+    )
+    normalized = unit.strip().lower().replace("°", "").replace(" ", "")
+    if normalized != "auto":
+        return scale, offset, unit
+    max_edge = 512
+    factor = min(1.0, max_edge / max(source.width, source.height))
+    width = max(1, int(round(source.width * factor)))
+    height = max(1, int(round(source.height * factor)))
+    sample = masked_band_to_float(source.read(1, out_shape=(height, width), masked=True))
+    scaled = apply_scale_offset(sample, scale, offset)
+    return scale, offset, _infer_unit(scaled)
+
+
 class TiledGeoTiffReader:
     """Windowed quantitative reader for scalar radiometric GeoTIFFs.
 
@@ -99,13 +120,7 @@ class TiledGeoTiffReader:
                 raise AdapterUnavailableError(
                     "GeoTIFF is not a validated radiometric temperature raster: " + reasons
                 )
-            scale, offset, unit = _encoding(
-                source,
-                tags,
-                self.adapter.scale,
-                self.adapter.offset,
-                self.adapter.unit,
-            )
+            scale, offset, unit = _resolved_encoding(source, tags, self.adapter)
             return GeoTiffSourceContext(
                 width=int(source.width),
                 height=int(source.height),
@@ -151,13 +166,7 @@ class TiledGeoTiffReader:
                 raise AdapterUnavailableError(
                     "GeoTIFF is not a validated radiometric temperature raster: " + reasons
                 )
-            scale, offset, unit = _encoding(
-                source,
-                tags,
-                self.adapter.scale,
-                self.adapter.offset,
-                self.adapter.unit,
-            )
+            scale, offset, unit = _resolved_encoding(source, tags, self.adapter)
             for core_row in range(0, source.height, self.tile_size):
                 core_height = min(self.tile_size, source.height - core_row)
                 for core_col in range(0, source.width, self.tile_size):
@@ -233,13 +242,7 @@ class TiledGeoTiffReader:
             width = max(1, int(round(source.width * scale_factor)))
             height = max(1, int(round(source.height * scale_factor)))
             tags = source.tags()
-            scale, offset, unit = _encoding(
-                source,
-                tags,
-                self.adapter.scale,
-                self.adapter.offset,
-                self.adapter.unit,
-            )
+            scale, offset, unit = _resolved_encoding(source, tags, self.adapter)
             masked = source.read(1, out_shape=(height, width), masked=True)
             raw = masked_band_to_float(masked)
             temperature_c = temperature_to_celsius(apply_scale_offset(raw, scale, offset), unit)
@@ -285,13 +288,7 @@ class TiledGeoTiffReader:
             if x < 0 or y < 0 or x >= source.width or y >= source.height:
                 return None
             tags = source.tags()
-            scale, offset, unit = _encoding(
-                source,
-                tags,
-                self.adapter.scale,
-                self.adapter.offset,
-                self.adapter.unit,
-            )
+            scale, offset, unit = _resolved_encoding(source, tags, self.adapter)
             masked = source.read(1, window=Window(x, y, 1, 1), masked=True)
             raw = masked_band_to_float(masked)
             temperature_c = temperature_to_celsius(apply_scale_offset(raw, scale, offset), unit)
