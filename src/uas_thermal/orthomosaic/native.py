@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 import json
 import os
 from pathlib import Path
@@ -100,7 +99,6 @@ class NativeGeoTiffMosaicBackend(OrthomosaicBackend):
             sample_raw = masked_band_to_float(sample)
             sample_scaled = apply_scale_offset(sample_raw, scale, offset)
             canonical_unit = self._canonical_unit(unit, sample_scaled)
-            # Exercise conversion now so unsupported encodings fail before a mosaic is written.
             temperature_to_celsius(sample_scaled, canonical_unit)
             return {
                 "crs": str(source.crs),
@@ -160,6 +158,10 @@ class NativeGeoTiffMosaicBackend(OrthomosaicBackend):
 
             with rasterio.open(temporary) as raw:
                 profile = raw.profile.copy()
+                # rasterio.merge may carry small source block sizes into the temporary profile.
+                # GeoTIFF tiled blocks must be multiples of 16 on all supported GDAL builds.
+                profile.pop("blockxsize", None)
+                profile.pop("blockysize", None)
                 profile.update(
                     dtype="float32",
                     count=1,
@@ -167,6 +169,8 @@ class NativeGeoTiffMosaicBackend(OrthomosaicBackend):
                     compress="deflate",
                     predictor=3,
                     tiled=True,
+                    blockxsize=256,
+                    blockysize=256,
                     BIGTIFF="IF_SAFER",
                 )
                 with rasterio.open(destination, "w", **profile) as output:
