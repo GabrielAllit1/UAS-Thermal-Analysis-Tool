@@ -6,7 +6,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..inspections.models import Finding, InspectionResult
+from ..inspections.models import (
+    Confidence,
+    Finding,
+    FindingStatus,
+    InspectionResult,
+    QualityStatus,
+    Severity,
+)
 
 
 def _json_default(value: Any):
@@ -21,6 +28,26 @@ def _json_default(value: Any):
 
 def finding_payload(finding: Finding) -> dict[str, Any]:
     return json.loads(json.dumps(asdict(finding), default=_json_default))
+
+
+def finding_from_payload(payload: dict[str, Any]) -> Finding:
+    data = dict(payload)
+    data["severity"] = Severity(data.get("severity", Severity.MINOR))
+    data["confidence"] = Confidence(data.get("confidence", Confidence.MEDIUM))
+    data["quality_status"] = QualityStatus(data.get("quality_status", QualityStatus.PASS))
+    data["lifecycle_status"] = FindingStatus(data.get("lifecycle_status", FindingStatus.NEW))
+    if data.get("bbox") is not None:
+        data["bbox"] = tuple(data["bbox"])
+    data["polygon"] = [tuple(point) for point in data.get("polygon", [])]
+    return Finding(**data)
+
+
+def read_findings_json(path: str | Path) -> list[Finding]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    rows = payload.get("findings", [])
+    if not isinstance(rows, list):
+        raise ValueError("finding JSON must contain a findings list")
+    return [finding_from_payload(item) for item in rows]
 
 
 def write_json(result: InspectionResult, path: str | Path) -> Path:
