@@ -54,15 +54,21 @@ def _run_dji_probe(args: argparse.Namespace) -> int:
         frame = adapter.read(source, calibration)
         stats = summarize_temperature(frame.temperature_c)
     except Exception as exc:
-        library = adapter.sdk_library()
         payload = {
             "ok": False,
             "source": str(source),
             "adapter": adapter.name,
-            "sdk_library": None if library is None else str(library),
+            **adapter.source_diagnostics(source),
+            **adapter.sdk_diagnostics(),
             "error_type": type(exc).__name__,
             "error": str(exc),
         }
+        if payload.get("export_like_filename"):
+            payload["hint"] = (
+                "The filename looks like an exported derivative. DJI DIRP requires the original "
+                "camera R-JPEG with its radiometric payload intact. If a radiometric GeoTIFF was "
+                "exported alongside it, analyze the .tif with generic-geotiff instead."
+            )
         print(json.dumps(payload, indent=2), file=sys.stderr)
         return 1
 
@@ -73,6 +79,7 @@ def _run_dji_probe(args: argparse.Namespace) -> int:
         "vendor": adapter.vendor,
         "sdk_library": frame.metadata.get("sdk_library"),
         "sdk_api": frame.metadata.get("sdk_api"),
+        **adapter.sdk_diagnostics(),
         "width": int(frame.temperature_c.shape[1]),
         "height": int(frame.temperature_c.shape[0]),
         "palette": frame.metadata.get("palette"),
