@@ -11,7 +11,7 @@ def test_masked_integer_band_converts_nodata_to_nan() -> None:
 
     result = masked_band_to_float(values)
 
-    assert result.dtype == np.float64
+    assert result.dtype == np.float32
     assert np.isnan(result[1, 0])
     assert result[0, 0] == 2500.0
 
