@@ -22,6 +22,18 @@ def _tag_value(tags: Mapping[str, str], keys: tuple[str, ...]) -> str | None:
     return None
 
 
+def masked_band_to_float(values: np.ndarray) -> np.ndarray:
+    """Convert a rasterio/numpy masked band to float while preserving nodata as NaN.
+
+    Rasterio commonly returns integer masked arrays for radiometric GeoTIFF exports. Calling
+    ``filled(np.nan)`` on an integer masked array raises because NaN cannot be represented by the
+    integer dtype. Cast first, then fill, so nodata survives as NaN without corrupting valid samples.
+    """
+
+    masked = np.ma.asarray(values)
+    return np.asarray(masked.astype(np.float64).filled(np.nan), dtype=np.float64)
+
+
 def _infer_unit(values: np.ndarray) -> str:
     finite = np.asarray(values, dtype=float)
     finite = finite[np.isfinite(finite)]
@@ -91,9 +103,24 @@ def thermal_preview(temperature_c: np.ndarray) -> np.ndarray:
     if high <= low:
         high = low + 1.0
     scaled = np.clip((values - low) / (high - low), 0.0, 1.0)
-    scaled = np.nan_to_num(scaled, nan=0.0)
+    scaled = np.nan_to_num(scaled, nan=0.0, posinf=1.0, neginf=0.0)
     gray = np.round(scaled * 255.0).astype(np.uint8)
     return np.repeat(gray[:, :, None], 3, axis=2)
+
+
+def _sidecar_metadata(path: Path) -> dict[str, str]:
+    candidates = {
+        "world_file": (path.with_suffix(".tfw"), path.with_suffix(".tifw"), path.with_suffix(".wld")),
+        "projection": (path.with_suffix(".prj"),),
+        "kml": (path.with_suffix(".kml"),),
+    }
+    found: dict[str, str] = {}
+    for kind, paths in candidates.items():
+        for candidate in paths:
+            if candidate.is_file():
+                found[kind] = str(candidate)
+                break
+    return found
 
 
 class GenericGeoTiffAdapter(ThermalSensorAdapter):
@@ -116,7 +143,9 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
             raise AdapterUnavailableError("Install the geospatial extra to read GeoTIFF files") from exc
 
         with rasterio.open(path) as source:
-            raw = source.read(1, masked=True).filled(np.nan)
+            masked_band = source.read(1, masked=True)
+            raw = masked_band_to_float(masked_band)
+            masked_pixels = int(np.count_nonzero(np.ma.getmaskarray(masked_band)))
             tags = source.tags()
             tag_scale = _tag_value(tags, _SCALE_KEYS)
             tag_offset = _tag_value(tags, _OFFSET_KEYS)
@@ -138,7 +167,11 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
                     "width": source.width,
                     "height": source.height,
                     "count": source.count,
+                    "dtype": str(masked_band.dtype),
+                    "nodata": source.nodata,
+                    "masked_pixels": masked_pixels,
                     "tags": tags,
+                    "sidecars": _sidecar_metadata(path),
                     "calibration": {
                         "emissivity": calibration.emissivity,
                         "distance_m": calibration.distance_m,
