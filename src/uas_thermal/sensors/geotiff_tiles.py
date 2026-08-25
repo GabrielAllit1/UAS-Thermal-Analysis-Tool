@@ -74,8 +74,8 @@ def _resolved_encoding(source, tags, adapter: GenericGeoTiffAdapter) -> tuple[fl
         return scale, offset, unit
     max_edge = 512
     factor = min(1.0, max_edge / max(source.width, source.height))
-    width = max(1, int(round(source.width * factor)))
-    height = max(1, int(round(source.height * factor)))
+    width = max(1, round(source.width * factor))
+    height = max(1, round(source.height * factor))
     sample = masked_band_to_float(source.read(1, out_shape=(height, width), masked=True))
     scaled = apply_scale_offset(sample, scale, offset)
     return scale, offset, _infer_unit(scaled)
@@ -239,8 +239,8 @@ class TiledGeoTiffReader:
         source_path = Path(path)
         with rasterio.open(source_path) as source:
             scale_factor = min(1.0, max_edge / max(source.width, source.height))
-            width = max(1, int(round(source.width * scale_factor)))
-            height = max(1, int(round(source.height * scale_factor)))
+            width = max(1, round(source.width * scale_factor))
+            height = max(1, round(source.height * scale_factor))
             tags = source.tags()
             scale, offset, unit = _resolved_encoding(source, tags, self.adapter)
             masked = source.read(1, out_shape=(height, width), masked=True)
