@@ -22,6 +22,13 @@ def _tag_value(tags: Mapping[str, str], keys: tuple[str, ...]) -> str | None:
     return None
 
 
+def masked_band_to_float(values: np.ndarray) -> np.ndarray:
+    """Convert a masked raster band to float while preserving nodata as NaN."""
+
+    masked = np.ma.asarray(values)
+    return np.asarray(masked.astype(np.float64).filled(np.nan), dtype=np.float64)
+
+
 def _infer_unit(values: np.ndarray) -> str:
     finite = np.asarray(values, dtype=float)
     finite = finite[np.isfinite(finite)]
@@ -91,9 +98,24 @@ def thermal_preview(temperature_c: np.ndarray) -> np.ndarray:
     if high <= low:
         high = low + 1.0
     scaled = np.clip((values - low) / (high - low), 0.0, 1.0)
-    scaled = np.nan_to_num(scaled, nan=0.0)
+    scaled = np.nan_to_num(scaled, nan=0.0, posinf=1.0, neginf=0.0)
     gray = np.round(scaled * 255.0).astype(np.uint8)
     return np.repeat(gray[:, :, None], 3, axis=2)
+
+
+def _sidecar_metadata(path: Path) -> dict[str, str]:
+    candidates = {
+        "world_file": (path.with_suffix(".tfw"), path.with_suffix(".tifw"), path.with_suffix(".wld")),
+        "projection": (path.with_suffix(".prj"),),
+        "kml": (path.with_suffix(".kml"),),
+    }
+    found: dict[str, str] = {}
+    for kind, paths in candidates.items():
+        for candidate in paths:
+            if candidate.is_file():
+                found[kind] = str(candidate)
+                break
+    return found
 
 
 class GenericGeoTiffAdapter(ThermalSensorAdapter):
@@ -109,6 +131,39 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
     def can_read(self, path: Path) -> bool:
         return path.suffix.lower() in {".tif", ".tiff"}
 
+    def source_diagnostics(self, path: Path) -> dict[str, object]:
+        try:
+            import rasterio
+        except ImportError as exc:
+            raise AdapterUnavailableError("Install the geospatial extra to read GeoTIFF files") from exc
+
+        with rasterio.open(path) as source:
+            sample = source.read(
+                1,
+                out_shape=(min(source.height, 512), min(source.width, 512)),
+                masked=True,
+            )
+            sample_values = masked_band_to_float(sample)
+            finite = sample_values[np.isfinite(sample_values)]
+            return {
+                "driver": source.driver,
+                "width": source.width,
+                "height": source.height,
+                "count": source.count,
+                "dtype": str(source.dtypes[0]),
+                "nodata": source.nodata,
+                "scales": [float(value) for value in source.scales],
+                "offsets": [float(value) for value in source.offsets],
+                "crs": None if source.crs is None else str(source.crs),
+                "transform": [float(value) for value in tuple(source.transform)[:6]],
+                "tags": source.tags(),
+                "sidecars": _sidecar_metadata(path),
+                "sample_masked_pixels": int(np.count_nonzero(np.ma.getmaskarray(sample))),
+                "sample_min_raw": None if finite.size == 0 else float(np.min(finite)),
+                "sample_max_raw": None if finite.size == 0 else float(np.max(finite)),
+                "sample_median_raw": None if finite.size == 0 else float(np.median(finite)),
+            }
+
     def read(self, path: Path, calibration: ThermalCalibration) -> ThermalFrame:
         try:
             import rasterio
@@ -116,7 +171,9 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
             raise AdapterUnavailableError("Install the geospatial extra to read GeoTIFF files") from exc
 
         with rasterio.open(path) as source:
-            raw = source.read(1, masked=True).filled(np.nan)
+            masked_band = source.read(1, masked=True)
+            raw = masked_band_to_float(masked_band)
+            masked_pixels = int(np.count_nonzero(np.ma.getmaskarray(masked_band)))
             tags = source.tags()
             tag_scale = _tag_value(tags, _SCALE_KEYS)
             tag_offset = _tag_value(tags, _OFFSET_KEYS)
@@ -138,7 +195,11 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
                     "width": source.width,
                     "height": source.height,
                     "count": source.count,
+                    "dtype": str(masked_band.dtype),
+                    "nodata": source.nodata,
+                    "masked_pixels": masked_pixels,
                     "tags": tags,
+                    "sidecars": _sidecar_metadata(path),
                     "calibration": {
                         "emissivity": calibration.emissivity,
                         "distance_m": calibration.distance_m,
