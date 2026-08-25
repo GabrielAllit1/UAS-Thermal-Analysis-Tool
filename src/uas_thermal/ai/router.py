@@ -37,13 +37,23 @@ def _parameter_billions(model: LocalAIModel) -> float:
     return float(match.group(1)) if match else 0.0
 
 
-def _base_penalties(name: str) -> tuple[float, list[str]]:
+def _is_embedding_model(model: LocalAIModel) -> bool:
+    name = model.name.lower()
+    return "embed" in name or "embedding" in model.capabilities
+
+
+def _is_code_specialized(model: LocalAIModel) -> bool:
+    name = model.name.lower()
+    return "coder" in name or "codellama" in name
+
+
+def _base_penalties(model: LocalAIModel) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
-    if "embed" in name:
+    if _is_embedding_model(model):
         score -= 1000.0
         reasons.append("embedding model is not a generative review model")
-    if "coder" in name or "codellama" in name:
+    if _is_code_specialized(model):
         score -= 14.0
         reasons.append("code-specialized model is deprioritized for thermal interpretation")
     return score, reasons
@@ -52,7 +62,7 @@ def _base_penalties(name: str) -> tuple[float, list[str]]:
 def score_model(model: LocalAIModel, task: str) -> ModelScore:
     name = model.name.lower()
     params = _parameter_billions(model)
-    score, reasons = _base_penalties(name)
+    score, reasons = _base_penalties(model)
 
     if task == "vision_review":
         if not model.supports_vision:
@@ -95,9 +105,12 @@ def score_model(model: LocalAIModel, task: str) -> ModelScore:
             reasons.append(f"{params:g}B parameter class supports richer engineering synthesis")
     elif task == "fast_triage":
         if params:
-            if params <= 4.5:
-                score += 24.0
-                reasons.append("small model class favors low-latency triage")
+            if params <= 1.5:
+                score += 16.0
+                reasons.append("ultra-small model favors responsiveness but has limited triage capacity")
+            elif params <= 5.0:
+                score += 26.0
+                reasons.append("small model class favors low-latency triage with useful reasoning headroom")
             elif params <= 9.0:
                 score += 18.0
                 reasons.append("mid-size model balances latency and reasoning")
@@ -120,8 +133,28 @@ def rank_models(models: tuple[LocalAIModel, ...], task: str) -> tuple[ModelScore
     return tuple(scored)
 
 
+def _task_candidates(models: tuple[LocalAIModel, ...], task: str) -> tuple[LocalAIModel, ...]:
+    """Prefer models aligned to the thermal task while retaining a bounded fallback.
+
+    General-language models are the authority for narrative and triage when available. Code-specialized
+    models remain eligible only as a last-resort generative fallback rather than winning on parameter
+    count alone. Embedding-only models never enter those task lanes.
+    """
+
+    if task not in {"engineering_narrative", "fast_triage"}:
+        return models
+    general = tuple(
+        model
+        for model in models
+        if not _is_embedding_model(model) and not _is_code_specialized(model)
+    )
+    if general:
+        return general
+    return tuple(model for model in models if not _is_embedding_model(model))
+
+
 def select_model(models: tuple[LocalAIModel, ...], task: str) -> LocalAIModel | None:
-    ranked = rank_models(models, task)
+    ranked = rank_models(_task_candidates(models, task), task)
     if not ranked or ranked[0].score <= -999.0:
         return None
     return ranked[0].model
