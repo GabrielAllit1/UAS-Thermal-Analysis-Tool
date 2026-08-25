@@ -20,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("validation-sources", help="List external radiometric validation datasets")
     sub.add_parser("ai-models", help="List locally installed Ollama models and capabilities")
     sub.add_parser("orthomosaic-status", help="Show local thermal orthomosaic backend availability")
+    sub.add_parser("autopilot-status", help="Show combined local AI and autonomous processing readiness")
 
     process = sub.add_parser(
         "process",
@@ -56,6 +57,12 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--distance-m", type=float, default=5.0)
     process.add_argument("--humidity", type=float, default=0.50)
     process.add_argument("--reflected-c", type=float, default=20.0)
+    process.add_argument(
+        "--ambient-c",
+        type=float,
+        default=None,
+        help="Ambient air temperature for provenance/compatible processing backends",
+    )
 
     inspect = sub.add_parser(
         "inspect",
@@ -73,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect.add_argument("--distance-m", type=float, default=5.0)
     inspect.add_argument("--humidity", type=float, default=0.50)
     inspect.add_argument("--reflected-c", type=float, default=20.0)
+    inspect.add_argument("--ambient-c", type=float, default=None)
 
     dji_probe = sub.add_parser(
         "dji-probe",
@@ -128,6 +136,7 @@ def _calibration_from_args(args: argparse.Namespace):
         distance_m=args.distance_m,
         relative_humidity=args.humidity,
         reflected_temperature_c=args.reflected_c,
+        ambient_temperature_c=getattr(args, "ambient_c", None),
     )
 
 
@@ -233,6 +242,18 @@ def _run_orthomosaic_status() -> int:
     from .orthomosaic import OrthomosaicService
 
     print(json.dumps({"backends": OrthomosaicService().status()}, indent=2))
+    return 0
+
+
+def _run_autopilot_status() -> int:
+    from .application.autopilot import autopilot_summary, scan_runtime
+
+    snapshot = scan_runtime()
+    payload = asdict(snapshot)
+    payload["summary"] = autopilot_summary(snapshot, 0)
+    payload["preferred_ai_mode"] = snapshot.preferred_ai_mode
+    payload["quantitative_stitch_available"] = snapshot.quantitative_stitch_available
+    print(json.dumps(payload, indent=2))
     return 0
 
 
@@ -514,6 +535,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_ai_models()
     if args.command == "orthomosaic-status":
         return _run_orthomosaic_status()
+    if args.command == "autopilot-status":
+        return _run_autopilot_status()
     if args.command == "process":
         return _run_process(args)
     if args.command == "inspect":
