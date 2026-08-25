@@ -49,6 +49,7 @@ class Finding:
 
     The first fields intentionally preserve the pre-v0.5 positional constructor contract.
     Extended evidence fields use explicit defaults so legacy callers remain compatible.
+    AI enrichment is supplemental narrative evidence and may never replace quantitative fields.
     """
 
     center_x: int
@@ -93,6 +94,7 @@ class Finding:
     evidence: list[str] = field(default_factory=list)
     suppression_checks: list[str] = field(default_factory=list)
     recommendation: str = ""
+    ai_enrichment: dict[str, Any] = field(default_factory=dict)
     annotated_image_path: str = ""
     crop_path: str = ""
     visible_image_path: str = ""
