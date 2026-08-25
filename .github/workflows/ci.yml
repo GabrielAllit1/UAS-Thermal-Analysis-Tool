@@ -29,6 +29,8 @@ jobs:
 
   windows-desktop-smoke:
     runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,5 +38,12 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install -U pip
-      - run: pip install -e ".[desktop,geospatial,reporting]"
+      - run: pip install -e ".[desktop,geospatial,reporting,dev]"
+      - run: python -m pytest tests/test_tiled_geotiff.py tests/test_viewer_tools.py
       - run: python scripts/smoke_workspace.py
+      - run: python scripts/capture_workspace_qa.py --output-dir build/ui-qa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-workspace-visual-qa
+          path: build/ui-qa/*.png
+          if-no-files-found: error
