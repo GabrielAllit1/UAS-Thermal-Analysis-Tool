@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uas-thermal-analysis"
-version = "0.7.0"
-description = "Vendor-neutral autonomous thermal processing, inspection and geospatial intelligence platform"
+version = "0.8.0"
+description = "Local-first AI-assisted autonomous thermal processing, inspection and geospatial intelligence platform"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "SALT19"}]
@@ -41,7 +41,7 @@ all = [
 uas-thermal = "uas_thermal.cli:main"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = {"" = "src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
