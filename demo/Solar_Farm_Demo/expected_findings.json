@@ -1,0 +1,19 @@
+{
+  "schema": "uas-thermal-demo-ground-truth/v1",
+  "expected_canonical_findings": 3,
+  "expected_severity_counts": {
+    "minor": 1,
+    "moderate": 1,
+    "critical": 1
+  },
+  "seeded_findings": [
+    {"id": "DEMO-A001", "tile": "thermal_r1_c1.tif", "delta_c": 8.0, "expected_severity": "minor", "pixel_box": [16, 16, 25, 25]},
+    {"id": "DEMO-A002", "tile": "thermal_r1_c2.tif", "delta_c": 14.0, "expected_severity": "moderate", "pixel_box": [16, 14, 25, 23]},
+    {"id": "DEMO-A003", "tile": "thermal_r2_c1.tif", "delta_c": 26.0, "expected_severity": "critical", "pixel_box": [18, 16, 27, 25]}
+  ],
+  "intentional_non_findings": [
+    "3.5 C coherent warm region below the photovoltaic minimum-delta threshold",
+    "30 C single-pixel spike that should be suppressed for insufficient region support",
+    "small nodata patch"
+  ]
+}
