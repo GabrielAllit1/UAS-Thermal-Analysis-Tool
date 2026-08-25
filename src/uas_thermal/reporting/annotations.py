@@ -39,6 +39,45 @@ def _pillow():
     return Image, ImageDraw, ImageFont
 
 
+def _scaled_geometry(
+    frame: ThermalFrame,
+    finding: Finding,
+    width: int,
+    height: int,
+) -> tuple[tuple[int, int, int, int], list[tuple[int, int]], int, int]:
+    metadata = frame.metadata or {}
+    source_width = int(metadata.get("source_width") or width)
+    source_height = int(metadata.get("source_height") or height)
+    scale_x = width / max(source_width, 1)
+    scale_y = height / max(source_height, 1)
+
+    def point(x: int, y: int) -> tuple[int, int]:
+        return int(round(x * scale_x)), int(round(y * scale_y))
+
+    if finding.bbox is None:
+        bbox_source = (
+            max(0, finding.center_x - 8),
+            max(0, finding.center_y - 8),
+            finding.center_x + 8,
+            finding.center_y + 8,
+        )
+    else:
+        bbox_source = finding.bbox
+    left, top = point(bbox_source[0], bbox_source[1])
+    right, bottom = point(bbox_source[2], bbox_source[3])
+    bbox = (
+        max(0, min(width - 1, left)),
+        max(0, min(height - 1, top)),
+        max(0, min(width - 1, right)),
+        max(0, min(height - 1, bottom)),
+    )
+    polygon = [point(x, y) for x, y in finding.polygon]
+    hx = finding.hotspot_x if finding.hotspot_x is not None else finding.center_x
+    hy = finding.hotspot_y if finding.hotspot_y is not None else finding.center_y
+    hotspot_x, hotspot_y = point(hx, hy)
+    return bbox, polygon, hotspot_x, hotspot_y
+
+
 def render_annotated_frame(frame: ThermalFrame, finding: Finding):
     """Render finding evidence without modifying the quantitative temperature matrix."""
 
@@ -47,17 +86,10 @@ def render_annotated_frame(frame: ThermalFrame, finding: Finding):
     draw = ImageDraw.Draw(image)
     font = ImageFont.load_default()
     color = _SEVERITY_RGB.get(finding.severity, (255, 255, 255))
-    bbox = finding.bbox or (
-        max(0, finding.center_x - 8),
-        max(0, finding.center_y - 8),
-        min(image.width - 1, finding.center_x + 8),
-        min(image.height - 1, finding.center_y + 8),
-    )
+    bbox, polygon, hx, hy = _scaled_geometry(frame, finding, image.width, image.height)
     draw.rectangle(bbox, outline=color, width=3)
-    if finding.polygon:
-        draw.line([*finding.polygon, finding.polygon[0]], fill=color, width=2)
-    hx = finding.hotspot_x if finding.hotspot_x is not None else finding.center_x
-    hy = finding.hotspot_y if finding.hotspot_y is not None else finding.center_y
+    if polygon:
+        draw.line([*polygon, polygon[0]], fill=color, width=2)
     draw.line((hx - 7, hy, hx + 7, hy), fill=(255, 255, 255), width=2)
     draw.line((hx, hy - 7, hx, hy + 7), fill=(255, 255, 255), width=2)
 
@@ -92,12 +124,7 @@ def write_finding_evidence(
     overview_path = destination / "annotated_thermal.png"
     overview.save(overview_path)
 
-    bbox = finding.bbox or (
-        max(0, finding.center_x - 16),
-        max(0, finding.center_y - 16),
-        min(overview.width - 1, finding.center_x + 16),
-        min(overview.height - 1, finding.center_y + 16),
-    )
+    bbox, _, _, _ = _scaled_geometry(frame, finding, overview.width, overview.height)
     margin = max(12, int(max(bbox[2] - bbox[0], bbox[3] - bbox[1]) * 0.5))
     crop_box = (
         max(0, bbox[0] - margin),
@@ -121,13 +148,18 @@ def write_finding_evidence(
     crop_thumb.thumbnail((340, 220))
     panel_x = plate_w - 360
     plate.paste(crop_thumb, (panel_x, 56))
+    reference = (
+        finding.reference_temperature_c
+        if finding.reference_temperature_c is not None
+        else finding.baseline_temperature_c
+    )
     lines = [
         finding_id,
         f"Classification: {finding.classification or finding.finding_type}",
         f"Severity: {finding.severity.value.upper()}",
         f"Confidence: {finding.confidence.value.upper()}",
         f"Maximum: {finding.max_temperature_c:.1f} C",
-        f"Reference: {finding.reference_temperature_c if finding.reference_temperature_c is not None else finding.baseline_temperature_c:.1f} C",
+        f"Reference: {reference:.1f} C",
         f"Delta T: {finding.delta_temperature_c:+.1f} C",
         f"Area: {finding.area_px} px",
         f"Reference: {finding.reference_method or 'not established'}",
@@ -136,7 +168,13 @@ def write_finding_evidence(
         lines.append(f"Location: {finding.latitude:.6f}, {finding.longitude:.6f}")
     lines.extend(["", "Evidence:"])
     lines.extend(f"- {item}" for item in finding.evidence[:5])
-    lines.extend(["", "Recommendation:", finding.recommendation or finding.notes or "Field verification recommended."])
+    lines.extend(
+        [
+            "",
+            "Recommendation:",
+            finding.recommendation or finding.notes or "Field verification recommended.",
+        ]
+    )
     y = 300
     for line in lines:
         draw.text((panel_x, y), line[:64], fill=(20, 28, 38), font=font)
