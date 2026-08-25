@@ -4,7 +4,7 @@ from dataclasses import asdict, is_dataclass
 from enum import Enum
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, overload
 
 from ..inspections.models import (
     Confidence,
@@ -14,6 +14,30 @@ from ..inspections.models import (
     QualityStatus,
     Severity,
 )
+
+
+class FindingCollection(list[Finding]):
+    """List-compatible finding collection with a document-style findings alias.
+
+    Existing programmatic callers receive normal list semantics. The string alias keeps desktop
+    comparison code compatible with both bare-list and document-shaped finding readers.
+    """
+
+    @overload
+    def __getitem__(self, index: int) -> Finding: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> list[Finding]: ...
+
+    @overload
+    def __getitem__(self, index: str) -> FindingCollection: ...
+
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            if index == "findings":
+                return self
+            raise KeyError(index)
+        return super().__getitem__(index)
 
 
 def _json_default(value: Any):
@@ -42,12 +66,12 @@ def finding_from_payload(payload: dict[str, Any]) -> Finding:
     return Finding(**data)
 
 
-def read_findings_json(path: str | Path) -> list[Finding]:
+def read_findings_json(path: str | Path) -> FindingCollection:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     rows = payload.get("findings", [])
     if not isinstance(rows, list):
         raise ValueError("finding JSON must contain a findings list")
-    return [finding_from_payload(item) for item in rows]
+    return FindingCollection(finding_from_payload(item) for item in rows)
 
 
 def write_json(result: InspectionResult, path: str | Path) -> Path:

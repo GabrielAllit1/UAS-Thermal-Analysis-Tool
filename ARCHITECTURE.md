@@ -12,8 +12,8 @@ SOURCE CLASSIFICATION
 ┌────────────────────────────────┬────────────────────────────────┐
 │ QUANTITATIVE RADIOMETRIC LANE  │ DISPLAY / GIS LANE             │
 │                                │                                │
-│ ThermalFrame                   │ DisplayRaster                  │
-│ Celsius matrix                 │ bounded RGB preview            │
+│ ThermalFrame / tile stream     │ DisplayRaster                  │
+│ Celsius values                 │ bounded RGB preview            │
 │ sensor/calibration provenance  │ CRS / affine metadata          │
 │ optional display RGB           │ no temperature claims         │
 └───────────────┬────────────────┴───────────────┬────────────────┘
@@ -44,7 +44,7 @@ analyze_inspection(project, sources, profile)
     ↓
 discover / validate source
     ↓
-extract normalized ThermalFrame
+extract normalized ThermalFrame or quantitative tile stream
     ↓
 radiometric quality gate
     ↓
@@ -76,15 +76,19 @@ GUI, CLI, batch, and future API paths should reuse this authority rather than re
 ## Subsystems
 
 ### application
-Owns project/dataset state, the Thermal Intelligence Workspace, source/media pairing, processing state, shared selection, and orchestration. It does not decode vendor radiometry or implement thermal algorithms.
+Owns project/dataset state, the Thermal Operations Workspace, source/media pairing, processing history, shared selection, radiometric-viewer interaction, and orchestration. It does not decode vendor radiometry or implement thermal algorithms.
 
 Key authorities:
 
 - `projects.Project` / `DatasetRecord`: persisted project and dataset context.
 - `orchestrator.AutonomousInspectionOrchestrator`: canonical inspection execution.
+- `processing.ProcessingHistoryStore`: persistent processing-run records.
+- `viewer`: palette/isotherm rendering, temperature cursor, ROI statistics, opacity and swipe comparison primitives.
 - `workspace.SelectionState`: shared map/table/inspector selection.
 - `desktop.DesktopSession`: thin desktop application session; delegates inspection analysis to the orchestrator.
-- `workspace_ui`: Projects, Overview, Data, Explore, Analyze, Findings, Compare, Reports, Exports, Analytics, Profiles, and Settings surfaces.
+- `workspace_ui_v2`: Projects, Overview, Data, Explore, Analyze, Processing, Findings, Compare, Reports, Exports, Analytics, Profiles, and Settings surfaces.
+
+Large project/source/finding/history registers use Qt's model/view API rather than item-per-cell widgets, keeping UI row materialization bounded by the visible viewport.
 
 ### thermal
 Owns quantitative calibration, source-quality assessment, statistics, contextual anomaly detection, suppression, and deterministic validation.
@@ -106,6 +110,8 @@ A quantitative adapter implements:
 
 A `ThermalFrame` contains a Celsius temperature matrix, optional display RGB, source path, sensor/vendor metadata, and optional CRS/affine transform.
 
+`geotiff_tiles.TiledGeoTiffReader` is the bounded-memory quantitative path for oversized scalar radiometric GeoTIFFs. Every tile has an overlap halo for local-context detection and a non-overlapping core that owns each source pixel exactly once. Full-raster min/max/mean/stddev and valid-pixel counts are accumulated over core pixels; percentile estimates use a deterministic bounded sample and are labeled as such.
+
 ### geospatial
 Owns CRS transforms, pixel/map conversion, bounded raster presentation, display overlays, KML support, and world-file transforms.
 
@@ -113,7 +119,7 @@ Owns CRS transforms, pixel/map conversion, bounded raster presentation, display 
 - `transforms.crs_warning` prevents internally suspicious/local CRS metadata from silently becoming authoritative WGS84.
 - `overlays.finding_to_display_point` projects already-geolocated canonical findings onto a display raster when both authorities are valid.
 
-The source radiometric frame remains the temperature authority; an orthomosaic is a geographic presentation canvas.
+The source radiometric frame or quantitative raster stream remains the temperature authority; an orthomosaic is a geographic presentation canvas.
 
 ### inspections
 Owns canonical thermal findings and their operational interpretation.
@@ -130,12 +136,15 @@ Severity and confidence are deliberately independent. Numeric confidence compone
 ### reporting
 Projects canonical findings into professional deliverables without creating report-only truth.
 
-- `annotations`: annotated thermograms, crops, reusable finding plates.
+- `annotations`: annotated thermograms, crops, reusable finding plates; full-raster finding geometry is scaled onto bounded tiled previews when necessary.
 - `pdf_report`: executive summary, inspection information, data quality, finding summary/details, methodology, and limitations.
 - `csv_report`, `json_report`, `geojson_report`, `kml_report`: machine-readable projections.
 - `package`: deterministic inspection directory and SHA-256 manifest.
 
 Every report statement must remain traceable to a canonical finding and its source radiometric evidence.
+
+### validation
+Defines external fixture contracts without bringing vendor binaries, customer data, or large public datasets into source control. The registry documents official DJI TSDK test R-JPEGs, public radiometric research fixtures, licenses, checksums, and what each source can and cannot prove. Opt-in integration tests are enabled only when local fixture paths are explicitly configured.
 
 ### platform
 Owns configuration, logging, packaging helpers, and the commercial licensing boundary. Vendor binaries and secrets stay outside source control. Subscription entitlement remains a later production tranche.
@@ -183,9 +192,9 @@ No profile is described as standards-compliant unless a specific standard is sep
 
 ## Memory boundary
 
-Full-frame quantitative GeoTIFF analysis currently has a conservative 50,000,000-pixel safety limit. Oversized quantitative rasters require a tiled radiometric workflow. Display/GIS previews use bounded resampling and can represent much larger rasters without allocating the full source image.
+The generic GeoTIFF adapter retains a conservative in-memory safety threshold. Accepted quantitative rasters above that threshold are no longer rejected solely for size: canonical analysis routes them through overlapping quantitative windows with non-overlapping ownership cores. The UI receives a bounded radiometric preview while findings and global pixel coordinates remain referenced to the full source raster.
 
-Inspection orchestration isolates per-source decode/quality failures so one invalid source does not automatically discard otherwise valid observations.
+Display/GIS previews remain separately bounded and never acquire temperature authority. Inspection orchestration also isolates per-source decode/quality failures so one invalid source does not automatically discard otherwise valid observations.
 
 ## Provenance invariant
 
@@ -196,7 +205,7 @@ PDF / MAP / TABLE / ANNOTATION / CSV / JSON
                     ↓
           Analysis characterization
                     ↓
-             ThermalFrame region
+       ThermalFrame / raster tile region
                     ↓
        original radiometric source
 ```
@@ -217,6 +226,7 @@ GPS coordinate != proven physical-defect identity
 duplicate cluster != proven same asset without evidence
 automated report != thermographer certification
 unit test != field validation
+public fixture pass != universal field accuracy
 ```
 
 ## Compatibility strategy
@@ -227,8 +237,8 @@ The original root-level modules remain temporarily as the legacy baseline. New p
 
 | Adapter | State | Notes |
 |---|---|---|
-| Generic radiometric GeoTIFF | Operational with validation | Scalar radiometric rasters with explicit/inferable units; rendered uncalibrated imagery is rejected |
+| Generic radiometric GeoTIFF | Operational with validation | Scalar radiometric rasters with explicit/inferable units; oversized accepted rasters use bounded quantitative tiling |
 | Display/GIS GeoTIFF | Operational preview | Bounded RGB preview/context; never treated as temperature data |
-| DJI DIRP | Operational with SDK | Runtime discovery and current ABI binding implemented; original camera R-JPEG still requires representative real-source Windows proof |
+| DJI DIRP | Operational with SDK | Runtime discovery and current ABI binding implemented; official vendor-supplied R-JPEG fixtures can validate the runtime boundary, while representative target-camera field parity remains a separate proof |
 | FLIR/Teledyne | Contract only | Decoder intentionally not claimed until validated against supported radiometric formats |
 | Autel | Contract only | Decoder intentionally not claimed until validated against supported radiometric formats |

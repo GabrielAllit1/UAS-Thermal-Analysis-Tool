@@ -17,6 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("desktop", help="Launch the desktop application")
     sub.add_parser("profiles", help="List supported versioned inspection profiles")
     sub.add_parser("validate-synthetic", help="Run deterministic contextual detector validation")
+    sub.add_parser("validation-sources", help="List external radiometric validation datasets")
 
     inspect = sub.add_parser(
         "inspect",
@@ -134,6 +135,13 @@ def _run_synthetic_validation() -> int:
     return 0
 
 
+def _run_validation_sources() -> int:
+    from .validation.external_sources import SOURCES
+
+    print(json.dumps([asdict(source) for source in SOURCES], indent=2))
+    return 0
+
+
 def _run_dji_probe(args: argparse.Namespace) -> int:
     from .sensors.dji import DjiDirpAdapter
     from .thermal.calibration import ThermalCalibration
@@ -248,12 +256,6 @@ def _run_geotiff_probe(args: argparse.Namespace) -> int:
                 "data. Use the original radiometric source, a calibrated single-band thermal "
                 "GeoTIFF, or the original camera R-JPEG rather than forcing a temperature unit."
             )
-        elif diagnostics.get("requires_tiled_processing"):
-            payload["hint"] = (
-                "The file is too large for the current full-frame analyzer. The probe is safe, "
-                "but production analysis requires radiometric tiles or the planned tiled-mosaic "
-                "workflow."
-            )
         else:
             payload["hint"] = (
                 "Do not guess thermal units. If the export documentation identifies the raster "
@@ -262,6 +264,7 @@ def _run_geotiff_probe(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2), file=sys.stderr)
         return 1
 
+    tiled = bool(diagnostics.get("requires_tiled_processing"))
     payload = {
         "ok": True,
         **base_payload,
@@ -269,12 +272,13 @@ def _run_geotiff_probe(args: argparse.Namespace) -> int:
         "resolved_offset": encoding.get("offset"),
         "resolved_input_unit": encoding.get("input_unit"),
         "sample_temperature": asdict(stats),
-        "full_frame_analysis_ready": not bool(diagnostics.get("requires_tiled_processing")),
+        "full_frame_analysis_ready": True,
+        "analysis_mode": "tiled" if tiled else "full-frame",
     }
-    if diagnostics.get("requires_tiled_processing"):
+    if tiled:
         payload["analysis_warning"] = (
-            "Radiometry can be sampled, but this raster exceeds the current full-frame analysis "
-            "limit and requires tiled processing."
+            "The raster exceeds the in-memory frame limit. Canonical inspection analysis will "
+            "process quantitative overlapping tiles while keeping memory bounded."
         )
     sidecars = diagnostics.get("sidecars", {})
     if diagnostics.get("crs") is None and isinstance(sidecars, dict):
@@ -352,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_profiles()
     if args.command == "validate-synthetic":
         return _run_synthetic_validation()
+    if args.command == "validation-sources":
+        return _run_validation_sources()
     if args.command == "inspect":
         return _run_inspect(args)
     if args.command == "dji-probe":
