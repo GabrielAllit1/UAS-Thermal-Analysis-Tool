@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from urllib import error, request
@@ -68,26 +69,37 @@ class OllamaProvider(LocalAIProvider):
             quantization=str(details.get("quantization_level", "")),
         )
 
+    def _fallback_model(self, item: dict[str, Any], name: str) -> LocalAIModel:
+        details = item.get("details") or {}
+        return LocalAIModel(
+            name=name,
+            provider=self.name,
+            parameter_size=str(details.get("parameter_size", "")),
+            quantization=str(details.get("quantization_level", "")),
+        )
+
     def list_models(self) -> tuple[LocalAIModel, ...]:
         payload = self._request("GET", "/api/tags")
-        models: list[LocalAIModel] = []
+        tagged: list[tuple[dict[str, Any], str]] = []
         for item in payload.get("models", []):
             name = str(item.get("name") or item.get("model") or "").strip()
-            if not name:
-                continue
+            if name:
+                tagged.append((item, name))
+        if not tagged:
+            return ()
+
+        def inspect(entry: tuple[dict[str, Any], str]) -> LocalAIModel:
+            item, name = entry
             try:
-                models.append(self.show_model(name))
+                return self.show_model(name)
             except RuntimeError:
-                details = item.get("details") or {}
-                models.append(
-                    LocalAIModel(
-                        name=name,
-                        provider=self.name,
-                        parameter_size=str(details.get("parameter_size", "")),
-                        quantization=str(details.get("quantization_level", "")),
-                    )
-                )
-        return tuple(models)
+                return self._fallback_model(item, name)
+
+        # Capability probes are independent. Bounded parallelism avoids a slow/unloaded model making
+        # runtime discovery serially block for N * timeout while preserving the /api/tags order.
+        workers = min(6, len(tagged))
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ollama-show") as pool:
+            return tuple(pool.map(inspect, tagged))
 
     @staticmethod
     def _image_payload(images: tuple[str | Path, ...]) -> list[str]:
