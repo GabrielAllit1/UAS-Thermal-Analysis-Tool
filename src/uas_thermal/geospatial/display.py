@@ -57,7 +57,7 @@ def _preview_shape(width: int, height: int, max_edge: int) -> tuple[int, int]:
     if max_edge < 64:
         raise ValueError("max_edge must be at least 64 pixels")
     scale = min(1.0, max_edge / max(width, height))
-    return max(1, int(round(height * scale))), max(1, int(round(width * scale)))
+    return max(1, round(height * scale)), max(1, round(width * scale))
 
 
 def read_display_raster(path: str | Path, *, max_edge: int = 1600) -> DisplayRaster:

@@ -76,6 +76,9 @@ def launch() -> int:
 
     import sys
 
+    from ..geospatial.display import read_display_raster
+    from ..sensors.generic import GenericGeoTiffAdapter
+
     session = DesktopSession()
 
     class AnalysisThread(QThread):
@@ -90,6 +93,22 @@ def launch() -> int:
         def run(self) -> None:
             try:
                 self.completed.emit(session.analyze(self.calibration, self.adapter_name))
+            except Exception as exc:
+                self.failed.emit(str(exc))
+
+    class PreviewThread(QThread):
+        completed = pyqtSignal(object, object)
+        failed = pyqtSignal(str)
+
+        def __init__(self, source: Path):
+            super().__init__()
+            self.source = source
+
+        def run(self) -> None:
+            try:
+                display = read_display_raster(self.source, max_edge=1600)
+                diagnostics = GenericGeoTiffAdapter().source_diagnostics(self.source)
+                self.completed.emit(display, diagnostics)
             except Exception as exc:
                 self.failed.emit(str(exc))
 
@@ -133,17 +152,24 @@ def launch() -> int:
                 project_form.addRow(label, widget)
             controls.addWidget(project_box)
 
-            source_box = QGroupBox("Thermal sources")
+            source_box = QGroupBox("Sources")
             source_layout = QVBoxLayout(source_box)
             self.source_label = QLabel("No files selected")
-            select_sources = QPushButton("Select thermal files")
+            self.source_status = QLabel("Status: not classified")
+            self.source_status.setWordWrap(True)
+            select_sources = QPushButton("Select imagery")
             select_sources.clicked.connect(self.choose_sources)
+            self.preview_button = QPushButton("Preview / classify selected")
+            self.preview_button.setEnabled(False)
+            self.preview_button.clicked.connect(self.preview_selected_source)
             self.adapter = QComboBox()
             self.adapter.addItem("Auto detect", None)
             for adapter in session.workflow.registry.adapters:
                 self.adapter.addItem(f"{adapter.vendor} — {adapter.name}", adapter.name)
             source_layout.addWidget(self.source_label)
+            source_layout.addWidget(self.source_status)
             source_layout.addWidget(select_sources)
+            source_layout.addWidget(self.preview_button)
             source_layout.addWidget(self.adapter)
             controls.addWidget(source_box)
 
@@ -159,7 +185,7 @@ def launch() -> int:
             calibration_form.addRow("Reflected temp (°C)", self.reflected)
             controls.addWidget(calibration_box)
 
-            self.analyze_button = QPushButton("Analyze")
+            self.analyze_button = QPushButton("Analyze radiometry")
             self.analyze_button.setEnabled(False)
             self.analyze_button.clicked.connect(self.start_analysis)
             self.export_button = QPushButton("Export PDF / CSV / KML")
@@ -169,7 +195,7 @@ def launch() -> int:
             controls.addWidget(self.export_button)
             controls.addStretch(1)
 
-            self.preview = QLabel("Select a source and run analysis")
+            self.preview = QLabel("Select imagery to preview or analyze")
             self.preview.setAlignment(Qt.AlignCenter)
             self.preview.setMinimumHeight(420)
             self.preview.setStyleSheet(
@@ -185,16 +211,74 @@ def launch() -> int:
         def choose_sources(self) -> None:
             paths, _ = QFileDialog.getOpenFileNames(
                 self,
-                "Select thermal imagery",
+                "Select thermal or geospatial imagery",
                 "",
-                "Thermal files (*.tif *.tiff *.jpg *.jpeg)",
+                "Supported imagery (*.tif *.tiff *.jpg *.jpeg)",
             )
             if not paths:
                 return
             session.set_sources(paths)
             self.source_label.setText(f"{len(paths)} file(s) selected")
+            self.source_status.setText("Status: selected · classification pending")
             self.analyze_button.setEnabled(True)
+            self.preview_button.setEnabled(True)
             self.export_button.setEnabled(False)
+            if len(paths) == 1 and Path(paths[0]).suffix.lower() in {".tif", ".tiff"}:
+                self.preview_selected_source()
+
+        def preview_selected_source(self) -> None:
+            if not session.sources:
+                return
+            source = session.sources[0]
+            if source.suffix.lower() not in {".tif", ".tiff"}:
+                self.source_status.setText(
+                    "Status: radiometric/native image candidate · analyze to decode temperatures"
+                )
+                return
+            self.preview_button.setEnabled(False)
+            self.source_status.setText("Status: reading bounded preview and classifying…")
+            self.preview_worker = PreviewThread(source)
+            self.preview_worker.completed.connect(self.on_preview_completed)
+            self.preview_worker.failed.connect(self.on_preview_failed)
+            self.preview_worker.start()
+
+        def _set_preview_rgb(self, rgb) -> None:
+            height, width, _ = rgb.shape
+            image = QImage(
+                rgb.data,
+                width,
+                height,
+                width * 3,
+                QImage.Format_RGB888,
+            ).copy()
+            self.preview.setPixmap(
+                QPixmap.fromImage(image).scaled(
+                    self.preview.size(),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            )
+
+        def on_preview_completed(self, display, diagnostics) -> None:
+            self.preview_button.setEnabled(True)
+            self._set_preview_rgb(display.rgb)
+            radiometric = bool(diagnostics.get("radiometric_candidate"))
+            tiled = bool(diagnostics.get("requires_tiled_processing"))
+            if radiometric:
+                mode = "Radiometric candidate"
+                self.analyze_button.setEnabled(not tiled)
+            else:
+                mode = "Display / GIS only"
+                if len(session.sources) == 1:
+                    self.analyze_button.setEnabled(False)
+            suffix = " · tiled processing required" if tiled else ""
+            reasons = diagnostics.get("radiometric_reasons") or []
+            reason_text = " · " + "; ".join(reasons) if reasons else ""
+            self.source_status.setText(f"Status: {mode}{suffix}{reason_text}")
+
+        def on_preview_failed(self, message: str) -> None:
+            self.preview_button.setEnabled(True)
+            self.source_status.setText(f"Status: preview unavailable · {message}")
 
         def _sync_project(self) -> None:
             session.project.name = self.project_name.text().strip() or "Untitled inspection"
@@ -244,25 +328,11 @@ def launch() -> int:
                     for column, value in enumerate(values):
                         self.results.setItem(row, column, QTableWidgetItem(value))
             if artifacts and artifacts[0].frame.display_rgb is not None:
-                rgb = artifacts[0].frame.display_rgb
-                height, width, _ = rgb.shape
-                image = QImage(
-                    rgb.data,
-                    width,
-                    height,
-                    width * 3,
-                    QImage.Format_RGB888,
-                ).copy()
-                self.preview.setPixmap(
-                    QPixmap.fromImage(image).scaled(
-                        self.preview.size(),
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation,
-                    )
-                )
+                self._set_preview_rgb(artifacts[0].frame.display_rgb)
             else:
                 count = sum(len(artifact.result.findings) for artifact in artifacts)
                 self.preview.setText(f"Analysis complete · {count} thermal finding(s)")
+            self.source_status.setText("Status: radiometric analysis complete")
             self.analyze_button.setEnabled(True)
             self.export_button.setEnabled(bool(artifacts))
 
