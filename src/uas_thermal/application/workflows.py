@@ -4,12 +4,16 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .. import __version__
 from ..geospatial.transforms import pixel_to_map, transform_point
-from ..inspections.models import InspectionResult
-from ..sensors.base import ThermalFrame
+from ..inspections.models import InspectionResult, InspectionSummary
+from ..inspections.profiles import InspectionProfile, get_profile
+from ..inspections.recommendations import maintenance_recommendation
+from ..sensors.base import AdapterUnavailableError, ThermalFrame
 from ..sensors.registry import AdapterRegistry, default_registry
-from ..thermal.anomaly_detection import DetectionConfig, detect_anomalies
+from ..thermal.anomaly_detection import DetectionConfig, analyze_temperature
 from ..thermal.calibration import ThermalCalibration
+from ..thermal.quality import evaluate_radiometric_quality
 from ..thermal.statistics import summarize_temperature
 from .projects import Project
 
@@ -35,21 +39,84 @@ class AnalysisWorkflow:
         calibration: ThermalCalibration | None = None,
         adapter_name: str | None = None,
         project: Project | None = None,
+        profile: InspectionProfile | None = None,
     ) -> AnalysisArtifact:
         source_path = Path(source)
+        calibration = calibration or ThermalCalibration()
+        active_profile = profile or get_profile(project.profile_id if project else None)
         adapter = self.registry.select(source_path, preferred=adapter_name)
-        frame = adapter.read(source_path, calibration or ThermalCalibration())
+        frame = adapter.read(source_path, calibration)
+        quality = evaluate_radiometric_quality(frame, calibration)
+        if not quality.accepted:
+            raise AdapterUnavailableError(
+                "Radiometric quality gate rejected source: " + "; ".join(quality.reasons)
+            )
+
         stats = summarize_temperature(frame.temperature_c)
-        findings = detect_anomalies(frame.temperature_c, config=self.detection)
+        config = DetectionConfig.from_profile(active_profile)
+        # Preserve explicit workflow overrides used by existing integrations/tests.
+        if self.detection != DetectionConfig():
+            config = self.detection
+        outcome = analyze_temperature(
+            frame.temperature_c,
+            config=config,
+            profile=active_profile,
+        )
+        findings = outcome.findings
         metadata = dict(frame.metadata)
+        metadata["analysis_engine_version"] = __version__
+        metadata["detection"] = outcome.diagnostics
         self._georeference(findings, frame, metadata)
+
+        project_metadata = project.report_metadata() if project else {}
+        inspection_id = project.inspection_id if project else ""
+        project_id = project.project_id if project else ""
+        source_id = source_path.name
+        for finding in findings:
+            finding.inspection_id = inspection_id
+            finding.project_id = project_id
+            finding.source_image_id = source_id
+            finding.source_path = str(source_path)
+            finding.source_sensor = " ".join(
+                filter(None, [project.sensor_vendor, project.sensor_model])
+            ) if project else str(frame.metadata.get("sensor", ""))
+            finding.radiometric_provenance = {
+                "adapter": adapter.name,
+                "quality_status": quality.status.value,
+                "calibration": {
+                    "emissivity": calibration.emissivity,
+                    "distance_m": calibration.distance_m,
+                    "relative_humidity": calibration.relative_humidity,
+                    "reflected_temperature_c": calibration.reflected_temperature_c,
+                },
+            }
+            finding.quality_status = quality.status
+            finding.analysis_engine_version = __version__
+            finding.recommendation = maintenance_recommendation(finding, active_profile)
+
+        summary = InspectionSummary(
+            images_discovered=1,
+            images_accepted=1,
+            images_warned=int(bool(quality.warnings)),
+            observations=len(findings),
+            canonical_findings=len(findings),
+            critical=sum(item.severity.value == "critical" for item in findings),
+            moderate=sum(item.severity.value == "moderate" for item in findings),
+            minor=sum(item.severity.value == "minor" for item in findings),
+            highest_temperature_c=max((item.max_temperature_c for item in findings), default=stats.maximum_c),
+            highest_delta_c=max((item.delta_temperature_c for item in findings), default=None),
+        )
         result = InspectionResult(
             source=str(source_path),
             adapter=adapter.name,
             statistics=stats,
             findings=findings,
             metadata=metadata,
-            project=project.report_metadata() if project else {},
+            project=project_metadata,
+            suppressions=outcome.suppressions,
+            quality=quality.as_dict(),
+            profile=active_profile.as_dict(),
+            summary=summary,
         )
         return AnalysisArtifact(result=result, frame=frame)
 
@@ -59,8 +126,9 @@ class AnalysisWorkflow:
         calibration: ThermalCalibration | None = None,
         adapter_name: str | None = None,
         project: Project | None = None,
+        profile: InspectionProfile | None = None,
     ) -> InspectionResult:
-        return self.analyze_artifact(source, calibration, adapter_name, project).result
+        return self.analyze_artifact(source, calibration, adapter_name, project, profile).result
 
     def analyze_many(
         self,
@@ -68,9 +136,10 @@ class AnalysisWorkflow:
         calibration: ThermalCalibration | None = None,
         adapter_name: str | None = None,
         project: Project | None = None,
+        profile: InspectionProfile | None = None,
     ) -> list[AnalysisArtifact]:
         return [
-            self.analyze_artifact(source, calibration, adapter_name, project)
+            self.analyze_artifact(source, calibration, adapter_name, project, profile)
             for source in sources
         ]
 
@@ -90,7 +159,9 @@ class AnalysisWorkflow:
                 finding.longitude = float(lon)
                 finding.latitude = float(lat)
                 assigned += 1
-        except RuntimeError as exc:
+        except (RuntimeError, ValueError) as exc:
             metadata.setdefault("warnings", []).append(str(exc))
+            metadata["georeferencing_status"] = "not_authoritative"
             return
         metadata["georeferenced_findings"] = assigned
+        metadata["georeferencing_status"] = "assigned"
