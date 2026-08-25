@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Callable, Any
+from typing import Any
 
 from ..ai.enrichment import enrich_finding
 from ..ai.ollama import OllamaProvider
