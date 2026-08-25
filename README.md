@@ -6,22 +6,29 @@ UAS Thermal Analysis is a project-centric thermal operations platform. Quantitat
 
 ## Current capabilities
 
-- Project-centric PyQt Thermal Intelligence Workspace with Projects, Overview, Data, Explore, Analyze, Findings, Compare, Reports, Exports, Analytics, Profiles, and Settings workspaces
+- Project-centric PyQt Thermal Operations Workspace with Projects, Overview, Data, Explore, Analyze, Processing, Findings, Compare, Reports, Exports, Analytics, Profiles, and Settings surfaces
+- Persistent Processing Center history with completed/canceled/failed run state, events, rejected-source counts, findings, and output-package provenance
+- Virtualized Qt table models for project, source, processing-history, and finding registers
+- Project portfolio list/search plus an explicit-coordinate location view that never invents geocoding
+- Full radiometric viewer primitives: selectable palettes, display range, isotherms, temperature-under-cursor, and ROI statistics
+- Explicit thermal-visible pairing with opacity, swipe, and side-by-side comparison
+- Previous-inspection structured finding comparison
 - Canonical autonomous inspection orchestration from source validation through canonical findings and output-package generation
 - Explicit separation between quantitative radiometric sources and display/GIS imagery so rendered thermal products are never treated as temperature matrices
-- Bounded GeoTIFF preview path for very large orthomosaics; preview generation does not allocate the full raster
+- Bounded GeoTIFF preview plus quantitative overlapping-tile processing for rasters above the in-memory safety threshold
+- Full-raster tiled statistics with exact min/max/mean/stddev/valid-pixel counts and documented bounded-sample percentile statistics
 - Radiometric quality gate with accepted / accepted-with-warnings / rejected states
 - Contextual multi-scale anomaly detection using local references, local ΔT, robust scene evidence, morphology, scale support, and explicit false-positive suppression
 - Stable structured findings with geometry, hotspot, local reference, severity, confidence, evidence, provenance, lifecycle state, and geolocation when authoritative
 - Versioned Generic Thermal, Electrical, Photovoltaic, Roof / Building Envelope, Mechanical, and Pipeline profiles over one domain-neutral detector
 - Cross-frame geospatial deduplication that retains original observation provenance
-- Thermal finding comparison for compatible repeated inspections
 - Automated annotated thermograms, finding crops, finding plates, professional PDF reports, CSV/JSON, and GeoJSON/KML when coordinates exist
 - Deterministic inspection package with SHA-256 manifest
-- Generic radiometric GeoTIFF adapter with explicit scale, offset, unit conversion, CRS, affine transform, radiometric classification, and full-frame safety limits
+- Generic radiometric GeoTIFF adapter with explicit scale, offset, unit conversion, CRS, affine transform, radiometric classification, and bounded-memory tiled analysis
 - Operational DJI DIRP adapter when a compatible vendor runtime is installed locally; no machine-specific DLL path is required
+- Opt-in external validation contracts for official DJI TSDK R-JPEG fixtures and public radiometric research datasets without committing third-party data
 - FLIR/Teledyne and Autel extension contracts without unsupported radiometric claims
-- Python 3.11/3.12 CI
+- Python 3.11/3.12 CI plus Windows desktop, tiled-raster, viewer, and representative-resolution visual QA
 
 > Automated thermal analysis is inspection intelligence, not thermographer certification. Field accuracy depends on source radiometry, calibration assumptions, capture conditions, and validation against representative labeled data.
 
@@ -57,7 +64,7 @@ DATASET DISCOVERY
   ↓
 RADIOMETRIC QUALITY GATE
   ↓
-NORMALIZED ThermalFrame
+NORMALIZED ThermalFrame / QUANTITATIVE TILE STREAM
   ↓
 MULTI-SCALE CONTEXTUAL DETECTION
   ↓
@@ -90,16 +97,17 @@ Severity and confidence are intentionally independent. Numeric confidence compon
 
 ```text
 src/uas_thermal/
-├── application/        # workspace UI, projects, workflows, orchestration, pairing
+├── application/        # workspace UI, projects, processing history, viewer, orchestration
 ├── thermal/            # calibration, quality gate, detection, statistics, validation
-├── sensors/            # generic + vendor adapters and registry
+├── sensors/            # generic/tiled + vendor adapters and registry
 ├── geospatial/         # display raster, CRS transforms, overlays, KML, world files
 ├── inspections/        # canonical findings, profiles, lifecycle, comparison, deduplication
 ├── reporting/          # annotations, plates, PDF, CSV, JSON, GeoJSON, KML, packages
+├── validation/         # external validation source contracts
 └── platform/           # configuration, licensing boundary, logging, packaging helpers
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for subsystem contracts and authority boundaries.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for subsystem contracts and authority boundaries. See [docs/VALIDATION_DATASETS.md](docs/VALIDATION_DATASETS.md) for external fixture sources and claim boundaries.
 
 ## Install for development
 
@@ -127,16 +135,17 @@ Capability status:
 python -m uas_thermal info
 ```
 
-Launch the Thermal Intelligence Workspace:
+Launch the Thermal Operations Workspace:
 
 ```powershell
 python -m uas_thermal desktop
 ```
 
-List inspection profiles:
+List inspection profiles and external validation sources:
 
 ```powershell
 python -m uas_thermal profiles
+python -m uas_thermal validation-sources
 ```
 
 Run deterministic detector validation:
@@ -160,11 +169,15 @@ Inspect GeoTIFF radiometric suitability without loading the full raster:
 python -m uas_thermal geotiff-probe "D:\path\source.tif"
 ```
 
+When an accepted radiometric GeoTIFF exceeds the full-frame memory threshold, canonical inspection analysis automatically uses bounded overlapping quantitative tiles rather than rejecting the source solely for size.
+
 Validate the bounded display/GIS path for a large raster:
 
 ```powershell
 python -m uas_thermal display-probe "D:\path\orthomosaic.tif"
 ```
+
+Opt-in real-data integration tests are documented in `docs/VALIDATION_DATASETS.md`; normal CI skips them unless the corresponding environment variables are configured.
 
 The original root application remains preserved as a compatibility reference while measured parity is completed. New product work targets `src/uas_thermal/`.
 
@@ -202,6 +215,8 @@ The platform may report automated anomaly evidence and prioritized inspection in
 - field precision/recall without labeled representative validation;
 - standards compliance unless a specific standard is implemented and verified.
 
+External fixtures can prove a named decoder, raster path, tiled workflow, or comparison operation against those fixtures. They do not convert software test coverage into field-certification evidence.
+
 ## Commercial licensing boundary
 
 The legacy symmetric HMAC licensing path is not production-ready for a paid downloadable product. Subscription issuance, renewal, payment state, offline grace, revocation, and automated entitlement management remain isolated behind `platform/licensing.py` for a later production tranche after application, analysis, and Windows distribution surfaces converge.
@@ -209,7 +224,8 @@ The legacy symmetric HMAC licensing path is not production-ready for a paid down
 ## Security and data handling
 
 - Real inspection/customer datasets are excluded from source control.
-- Vendor SDK binaries are excluded from source control.
+- Vendor SDK binaries and vendor test images are excluded from source control.
+- Large public research fixtures remain external to the repository and retain their own licenses/attribution requirements.
 - License signing secrets must never be committed or embedded in the desktop client.
 - Report/project metadata is supplied by the user or project file rather than hard-coded into application source.
 - Removing a dataset from a project must not delete original survey files.
