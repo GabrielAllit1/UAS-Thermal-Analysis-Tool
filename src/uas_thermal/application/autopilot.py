@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..ai.ollama import OllamaProvider
-from ..ai.provider import LocalAIProvider
+from ..ai.provider import LocalAIModel, LocalAIProvider
+from ..ai.router import ModelRoutingPlan, route_models
 from ..orthomosaic import OrthomosaicService
 from ..platform.config import AppConfig
 
@@ -15,6 +16,8 @@ class RuntimeSnapshot:
     vision_models: tuple[str, ...]
     orthomosaic_backends: tuple[tuple[str, bool], ...]
     ai_error: str = ""
+    models: tuple[LocalAIModel, ...] = ()
+    routes: ModelRoutingPlan = field(default_factory=ModelRoutingPlan)
 
     @property
     def preferred_ai_mode(self) -> str:
@@ -53,7 +56,15 @@ def scan_runtime(
 
     names = tuple(model.name for model in models)
     vision = tuple(model.name for model in models if model.supports_vision)
-    return RuntimeSnapshot(bool(names), names, vision, status)
+    routes = route_models(models)
+    return RuntimeSnapshot(
+        bool(names),
+        names,
+        vision,
+        status,
+        models=models,
+        routes=routes,
+    )
 
 
 def stage_for_event(message: str) -> str:
