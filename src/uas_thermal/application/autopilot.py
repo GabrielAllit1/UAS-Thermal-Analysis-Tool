@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..ai.ollama import OllamaProvider
 from ..ai.provider import LocalAIModel, LocalAIProvider
@@ -17,7 +17,7 @@ class RuntimeSnapshot:
     orthomosaic_backends: tuple[tuple[str, bool], ...]
     ai_error: str = ""
     models: tuple[LocalAIModel, ...] = ()
-    routes: ModelRoutingPlan = ModelRoutingPlan()
+    routes: ModelRoutingPlan = field(default_factory=ModelRoutingPlan)
 
     @property
     def preferred_ai_mode(self) -> str:
