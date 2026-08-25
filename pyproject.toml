@@ -61,3 +61,4 @@ select = ["E4", "E7", "E9", "F", "B", "UP", "RUF"]
 # PyQt callback signatures and UI copy are constrained by Qt conventions; keep exceptions local.
 "src/uas_thermal/application/workspace_ui_v2.py" = ["B008", "F401", "RUF001", "RUF046"]
 "src/uas_thermal/application/workspace_ui_v3.py" = ["F401"]
+"src/uas_thermal/application/workspace_ui_v4.py" = ["RUF001"]
