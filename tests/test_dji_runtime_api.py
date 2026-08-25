@@ -65,3 +65,14 @@ def test_dji_rejects_sdk_out_of_range_humidity():
         DjiDirpAdapter._measurement_params(
             ThermalCalibration(relative_humidity=0.10)
         )
+
+
+def test_dji_source_diagnostics_flags_exported_jpeg(tmp_path):
+    source = tmp_path / "thermal_export_example.jpg"
+    source.write_bytes(b"\xff\xd8payload\xff\xd9")
+
+    diagnostics = DjiDirpAdapter.source_diagnostics(source)
+
+    assert diagnostics["file_size_bytes"] == len(b"\xff\xd8payload\xff\xd9")
+    assert diagnostics["jpeg_signature"] is True
+    assert diagnostics["export_like_filename"] is True
