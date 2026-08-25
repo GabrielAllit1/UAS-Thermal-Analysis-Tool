@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import numpy as np
 import pytest
@@ -8,6 +9,7 @@ from uas_thermal.application.universal_pipeline import (
     UniversalProcessingPlan,
     UniversalThermalProcessor,
 )
+from uas_thermal.thermal.calibration import ThermalCalibration
 from uas_thermal.thermal.presentation import ThermalStyle
 
 rasterio = pytest.importorskip("rasterio")
@@ -45,6 +47,7 @@ def test_universal_pipeline_stitches_analyzes_and_builds_shareable_deliverable(t
         project,
         [left_path, right_path],
         tmp_path / "deliverables",
+        calibration=ThermalCalibration(ambient_temperature_c=31.5),
         plan=UniversalProcessingPlan(
             stitch_mode="on",
             orthomosaic_backend="native-geotiff",
@@ -59,7 +62,14 @@ def test_universal_pipeline_stitches_analyzes_and_builds_shareable_deliverable(t
     assert result.deliverable_dir.is_dir()
     assert (result.deliverable_dir / "maps" / "thermal_orthomosaic.tif").is_file()
     assert (result.deliverable_dir / "maps" / "annotated_thermal_overview.png").is_file()
+    assert (result.deliverable_dir / "maps" / "thermograms" / "thermogram_index.json").is_file()
+    assert list((result.deliverable_dir / "maps" / "thermograms").glob("*_thermal.png"))
     assert (result.deliverable_dir / "report" / "inspection_report.pdf").is_file()
-    assert (result.deliverable_dir / "report" / "processing_report.json").is_file()
+    processing_path = result.deliverable_dir / "report" / "processing_report.json"
+    assert processing_path.is_file()
+    processing = json.loads(processing_path.read_text(encoding="utf-8"))
+    assert processing["calibration"]["ambient_temperature_c"] == 31.5
+    assert processing["automation"]["orthomosaic_backend_used"] == "native-geotiff"
+    assert processing["rendered_thermograms"] >= 1
     assert (result.deliverable_dir / "viewer" / "index.html").is_file()
     assert (result.deliverable_dir / "inspection_manifest.json").is_file()
