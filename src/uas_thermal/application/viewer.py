@@ -21,10 +21,7 @@ class RoiStatistics:
 
 
 _PALETTES: dict[str, tuple[tuple[float, tuple[int, int, int]], ...]] = {
-    "gray": (
-        (0.0, (0, 0, 0)),
-        (1.0, (255, 255, 255)),
-    ),
+    "gray": ((0.0, (0, 0, 0)), (1.0, (255, 255, 255))),
     "iron": (
         (0.0, (0, 0, 0)),
         (0.25, (70, 0, 120)),
@@ -46,10 +43,7 @@ _PALETTES: dict[str, tuple[tuple[float, tuple[int, int, int]], ...]] = {
         (0.80, (255, 100, 0)),
         (1.0, (180, 0, 0)),
     ),
-    "blackhot": (
-        (0.0, (255, 255, 255)),
-        (1.0, (0, 0, 0)),
-    ),
+    "blackhot": ((0.0, (255, 255, 255)), (1.0, (0, 0, 0))),
 }
 
 
@@ -57,11 +51,7 @@ def available_palettes() -> tuple[str, ...]:
     return tuple(_PALETTES)
 
 
-def _finite_limits(
-    values: np.ndarray,
-    minimum_c: float | None,
-    maximum_c: float | None,
-) -> tuple[float, float]:
+def _finite_limits(values: np.ndarray, minimum_c: float | None, maximum_c: float | None) -> tuple[float, float]:
     finite = values[np.isfinite(values)]
     if finite.size == 0:
         return 0.0, 1.0
@@ -106,11 +96,7 @@ def render_temperature(
     isotherm_min_c: float | None = None,
     isotherm_max_c: float | None = None,
 ) -> tuple[np.ndarray, tuple[float, float]]:
-    normalized, low, high = normalize_temperature(
-        temperature_c,
-        minimum_c=minimum_c,
-        maximum_c=maximum_c,
-    )
+    normalized, low, high = normalize_temperature(temperature_c, minimum_c=minimum_c, maximum_c=maximum_c)
     key = palette.strip().lower()
     if key not in _PALETTES:
         raise ValueError(f"unsupported palette: {palette!r}")
@@ -133,13 +119,7 @@ def temperature_at(temperature_c: np.ndarray, x: int, y: int) -> float | None:
     return value if np.isfinite(value) else None
 
 
-def roi_statistics(
-    temperature_c: np.ndarray,
-    x0: int,
-    y0: int,
-    x1: int,
-    y1: int,
-) -> RoiStatistics:
+def roi_statistics(temperature_c: np.ndarray, x0: int, y0: int, x1: int, y1: int) -> RoiStatistics:
     values = np.asarray(temperature_c, dtype=np.float32)
     if values.ndim != 2:
         raise ValueError("temperature_c must be a two-dimensional matrix")
@@ -154,17 +134,17 @@ def roi_statistics(
     if finite.size == 0:
         raise ValueError("ROI contains no finite temperature samples")
     return RoiStatistics(
-        x0=left,
-        y0=top,
-        x1=right,
-        y1=bottom,
-        minimum_c=float(np.min(finite)),
-        maximum_c=float(np.max(finite)),
-        mean_c=float(np.mean(finite)),
-        median_c=float(np.median(finite)),
-        stddev_c=float(np.std(finite)),
-        p95_c=float(np.percentile(finite, 95)),
-        valid_pixels=int(finite.size),
+        left,
+        top,
+        right,
+        bottom,
+        float(np.min(finite)),
+        float(np.max(finite)),
+        float(np.mean(finite)),
+        float(np.median(finite)),
+        float(np.std(finite)),
+        float(np.percentile(finite, 95)),
+        int(finite.size),
     )
 
 
@@ -181,14 +161,8 @@ def _resize_nearest(image: np.ndarray, height: int, width: int) -> np.ndarray:
     source = _coerce_rgb(image)
     if source.shape[:2] == (height, width):
         return source
-    rows = np.minimum(
-        source.shape[0] - 1,
-        np.floor(np.arange(height) * source.shape[0] / height).astype(int),
-    )
-    cols = np.minimum(
-        source.shape[1] - 1,
-        np.floor(np.arange(width) * source.shape[1] / width).astype(int),
-    )
+    rows = np.minimum(source.shape[0] - 1, np.floor(np.arange(height) * source.shape[0] / height).astype(int))
+    cols = np.minimum(source.shape[1] - 1, np.floor(np.arange(width) * source.shape[1] / width).astype(int))
     return source[rows[:, None], cols[None, :]]
 
 
@@ -212,7 +186,7 @@ def swipe_rgb(left: np.ndarray, right: np.ndarray, fraction: float = 0.5) -> np.
     if not 0.0 <= fraction <= 1.0:
         raise ValueError("fraction must be between 0 and 1")
     left_rgb, right_rgb = align_rgb_pair(left, right)
-    split = int(round(left_rgb.shape[1] * fraction))
+    split = round(left_rgb.shape[1] * fraction)
     output = right_rgb.copy()
     output[:, :split] = left_rgb[:, :split]
     return output
