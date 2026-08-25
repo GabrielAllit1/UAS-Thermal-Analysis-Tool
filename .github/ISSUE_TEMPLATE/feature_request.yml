@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a sensor, workflow, analytics, or reporting capability
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Inspection need
+      description: What field or analysis problem should this solve?
+    validations:
+      required: true
+  - type: input
+    id: sensor
+    attributes:
+      label: Sensor / data format
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true

@@ -2,24 +2,45 @@
 secure_key.dat
 license_data.dat
 last_check.dat
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+LicenseTools/license_key_log.csv
+LicenseTools/generate_license_key.py
 
-# Packaged applications
+# Customer / inspection source data
+Thermal_Images/Uploads/
+private-data/
+
+# Vendor SDK binaries
+*.dll
+*.lib
+dirp_api.h
+dirp_wrapper.h
+libv_list.ini
+vendor/**/bin/
+
+# Packaged applications / build output
 ThermalAnalysis.exe
 *.exe
+build/
+dist/
+*.spec
 
 # Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .venv/
 venv/
 env/
-
-# Build output
-build/
-dist/
-*.spec
 
 # Generated analysis/report artifacts
 temp_*
@@ -28,35 +49,11 @@ Thermal_Analysis_*.pdf
 Thermal_Analysis_*.csv
 GeoTIFF_Anomalies.csv
 Batch_Anomalies.csv
+Thermal_Analysis_GeoTIFF_Anomalies.kml
 
 # IDE / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-
-# Private licensing records
-LicenseTools/license_key_log.csv
-
-# ============================================================
-# PRIVATE / INTERNAL LICENSING
-# ============================================================
-LicenseTools/license_key_log.csv
-LicenseTools/generate_license_key.py
-
-# ============================================================
-# CUSTOMER / INSPECTION SOURCE DATA
-# Keep real-world datasets outside source control.
-# Sanitized samples can be added later under samples/.
-# ============================================================
-Thermal_Images/Uploads/
-
-# ============================================================
-# THIRD-PARTY / VENDOR SDK BINARIES
-# Reintroduce later through documented vendor adapters/installers.
-# ============================================================
-*.dll
-*.lib
-dirp_api.h
-dirp_wrapper.h
-libv_list.ini
+Desktop.ini
