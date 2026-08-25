@@ -3,6 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from uas_thermal.application.projects import Project
+from uas_thermal.application.workflows import AnalysisWorkflow
 from uas_thermal.sensors.generic import GenericGeoTiffAdapter
 from uas_thermal.sensors.geotiff_tiles import TiledGeoTiffReader
 from uas_thermal.thermal.calibration import ThermalCalibration
@@ -61,3 +63,27 @@ def test_tiled_reader_preview_and_exact_pixel_probe(tmp_path):
     assert max(preview.temperature_c.shape) <= 60
     assert preview.metadata["preview_only"] is True
     assert reader.temperature_at(path, 73, 41) == pytest.approx(82.5)
+
+
+def test_analysis_workflow_routes_oversized_radiometry_through_tiles(tmp_path, monkeypatch):
+    import uas_thermal.sensors.generic as generic
+
+    path = tmp_path / "thermal-large-route.tif"
+    values = np.full((96, 128), 25.0, dtype=np.float32)
+    values[35:55, 50:75] = 48.0
+    _write_thermal(path, values)
+    monkeypatch.setattr(generic, "_MAX_IN_MEMORY_PIXELS", 1)
+
+    artifact = AnalysisWorkflow.default().analyze_artifact(
+        path,
+        calibration=ThermalCalibration(),
+        adapter_name="generic-geotiff",
+        project=Project(name="Tiled route"),
+    )
+
+    assert artifact.result.metadata["tiled_analysis"] is True
+    assert artifact.result.metadata["full_raster_statistics"] is True
+    assert artifact.frame.metadata["preview_only"] is True
+    assert artifact.result.statistics.valid_pixels == values.size
+    assert artifact.result.findings
+    assert max(item.max_temperature_c for item in artifact.result.findings) == pytest.approx(48.0)
