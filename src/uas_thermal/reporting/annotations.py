@@ -52,7 +52,7 @@ def _scaled_geometry(
     scale_y = height / max(source_height, 1)
 
     def point(x: int, y: int) -> tuple[int, int]:
-        return int(round(x * scale_x)), int(round(y * scale_y))
+        return round(x * scale_x), round(y * scale_y)
 
     if finding.bbox is None:
         bbox_source = (
