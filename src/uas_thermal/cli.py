@@ -11,6 +11,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="uas-thermal")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("info", help="Show installed capabilities and adapter state")
+    sub.add_parser("desktop", help="Launch the desktop application")
     return parser
 
 
@@ -25,4 +26,8 @@ def main(argv: list[str] | None = None) -> int:
         }
         print(json.dumps(payload, indent=2))
         return 0
+    if args.command == "desktop":
+        from .application.desktop import launch
+
+        return launch()
     return 2

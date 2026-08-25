@@ -1,31 +1,45 @@
 # Modernization roadmap
 
-## v0.2 — modular foundation
+## v0.2 — modular foundation ✅
 
 - Vendor-neutral package boundaries
-- Generic radiometric GeoTIFF adapter
 - Adapter registry and explicit vendor support states
 - Delta-based anomaly model
 - Project and report APIs
 - CI and Pages documentation
 
-## v0.3 — desktop parity
+## v0.3 — product core migration ✅
 
-- Move the PyQt desktop into `application/desktop`
-- Remove machine-specific GDAL and DLL paths
-- Normalize DJI R-JPEG output into `ThermalFrame`
+- Modular PyQt desktop entry point under `application/desktop`
+- Batch `AnalysisWorkflow` over normalized `ThermalFrame` artifacts
+- Remove machine-specific DJI DLL paths
+- Normalize proven DJI DIRP R-JPEG decoding into `ThermalFrame`
+- Operational generic radiometric GeoTIFF conversion with explicit units
+- Georeference findings from GeoTIFF CRS + affine transform
 - Replace embedded site/customer report values with project metadata
-- Add deterministic report fixtures and UI smoke tests
+- Vendor-neutral PDF / CSV / KML report bundles
 
 ## v0.4 — vendor expansion
 
-- Validate FLIR/Teledyne radiometric format support
-- Validate Autel radiometric format support
-- Add adapter conformance test kit and sanitized sample fixtures
+- Validate FLIR/Teledyne radiometric format support against sanitized vendor fixtures
+- Validate Autel radiometric format support against sanitized vendor fixtures
+- Add adapter conformance test kit and sensor capability matrix
+- Add calibrated cross-vendor reference datasets
 
-## v0.5 — production packaging
+## v0.5 — Windows production distribution
 
-- Windows installer and signed release artifacts
-- Asymmetric license verification
+- Professional Windows installer and upgrade path
+- Signed release artifacts
 - Release provenance and SBOM
-- Plugin discovery for third-party sensor adapters
+- Packaged optional vendor runtimes without committing redistributables that prohibit redistribution
+- Desktop smoke tests on Windows runners
+
+## v0.6 — automated commercial entitlement
+
+- Subscription-backed monthly and annual plans
+- Payment-provider webhooks as entitlement authority
+- Automatic activation, renewal, cancellation, failed-payment handling, grace periods, and revocation
+- Asymmetric signed entitlements: private signing key remains server-side; desktop ships only a public verification key
+- Secure device/account binding with bounded offline operation
+- In-app billing/renewal portal and automatic entitlement refresh
+- No human-issued keys and no operator intervention for normal customer lifecycle events

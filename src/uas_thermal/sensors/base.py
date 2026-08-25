@@ -26,6 +26,11 @@ class ThermalFrame:
     def __post_init__(self) -> None:
         if self.temperature_c.ndim != 2:
             raise ValueError("temperature_c must be a two-dimensional matrix")
+        if self.display_rgb is not None:
+            if self.display_rgb.ndim != 3 or self.display_rgb.shape[2] != 3:
+                raise ValueError("display_rgb must be an HxWx3 array")
+            if self.display_rgb.shape[:2] != self.temperature_c.shape:
+                raise ValueError("display_rgb dimensions must match temperature_c")
 
 
 class ThermalSensorAdapter(ABC):

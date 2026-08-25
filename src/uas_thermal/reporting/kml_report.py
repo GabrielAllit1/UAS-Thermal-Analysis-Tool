@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from ..inspections.models import InspectionResult
 
@@ -11,6 +11,13 @@ def write_kml(result: InspectionResult, path: str | Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     root = ET.Element("kml", xmlns="http://www.opengis.net/kml/2.2")
     document = ET.SubElement(root, "Document")
+    ET.SubElement(document, "name").text = result.project.get("name") or "Thermal Inspection"
+    context = [
+        result.project.get("site", ""),
+        result.project.get("client", ""),
+        result.project.get("inspection_date", ""),
+    ]
+    ET.SubElement(document, "description").text = " | ".join(item for item in context if item)
     for index, finding in enumerate(result.findings, 1):
         if finding.latitude is None or finding.longitude is None:
             continue

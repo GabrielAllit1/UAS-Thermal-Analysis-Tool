@@ -36,3 +36,4 @@ class InspectionResult:
     statistics: TemperatureStatistics
     findings: list[Finding] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    project: dict[str, Any] = field(default_factory=dict)
