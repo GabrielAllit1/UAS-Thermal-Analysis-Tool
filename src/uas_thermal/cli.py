@@ -15,6 +15,25 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("info", help="Show installed capabilities and adapter state")
     sub.add_parser("desktop", help="Launch the desktop application")
+    sub.add_parser("profiles", help="List supported versioned inspection profiles")
+    sub.add_parser("validate-synthetic", help="Run deterministic contextual detector validation")
+
+    inspect = sub.add_parser(
+        "inspect",
+        help="Run the canonical autonomous inspection workflow over one or more radiometric sources",
+    )
+    inspect.add_argument("sources", type=Path, nargs="+")
+    inspect.add_argument("--project", default="Untitled inspection")
+    inspect.add_argument("--site", default="")
+    inspect.add_argument("--client", default="")
+    inspect.add_argument("--inspection-id", default="")
+    inspect.add_argument("--profile", default="generic-thermal")
+    inspect.add_argument("--adapter", default=None)
+    inspect.add_argument("--output-dir", type=Path, default=None)
+    inspect.add_argument("--emissivity", type=float, default=0.95)
+    inspect.add_argument("--distance-m", type=float, default=5.0)
+    inspect.add_argument("--humidity", type=float, default=0.50)
+    inspect.add_argument("--reflected-c", type=float, default=20.0)
 
     dji_probe = sub.add_parser(
         "dji-probe",
@@ -48,6 +67,71 @@ def build_parser() -> argparse.ArgumentParser:
     display_probe.add_argument("source", type=Path, help="Path to a GeoTIFF or TIFF")
     display_probe.add_argument("--max-edge", type=int, default=1600)
     return parser
+
+
+def _run_inspect(args: argparse.Namespace) -> int:
+    from .application.orchestrator import AutonomousInspectionOrchestrator
+    from .application.projects import Project
+    from .inspections.profiles import get_profile
+    from .thermal.calibration import ThermalCalibration
+
+    sources = [source.expanduser().resolve() for source in args.sources]
+    missing = [str(source) for source in sources if not source.is_file()]
+    if missing:
+        print(json.dumps({"ok": False, "missing_sources": missing}, indent=2), file=sys.stderr)
+        return 2
+    project = Project(
+        name=args.project,
+        site=args.site,
+        client=args.client,
+        inspection_id=args.inspection_id,
+        profile_id=args.profile,
+    )
+    calibration = ThermalCalibration(
+        emissivity=args.emissivity,
+        distance_m=args.distance_m,
+        relative_humidity=args.humidity,
+        reflected_temperature_c=args.reflected_c,
+    )
+    try:
+        profile = get_profile(args.profile)
+        run = AutonomousInspectionOrchestrator().analyze_inspection(
+            project,
+            sources,
+            calibration=calibration,
+            adapter_name=args.adapter,
+            profile=profile,
+            output_dir=args.output_dir,
+        )
+    except Exception as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error_type": type(exc).__name__, "error": str(exc)},
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    payload = {"ok": bool(run.artifacts), **run.as_dict()}
+    print(json.dumps(payload, indent=2))
+    return 0 if run.artifacts else 1
+
+
+def _run_profiles() -> int:
+    from .inspections.profiles import available_profiles
+
+    print(json.dumps([item.as_dict() for item in available_profiles()], indent=2))
+    return 0
+
+
+def _run_synthetic_validation() -> int:
+    from .thermal.validation import evaluate_case, synthetic_cases
+
+    payload = []
+    for case in synthetic_cases():
+        payload.append({"case": case.name, **asdict(evaluate_case(case))})
+    print(json.dumps(payload, indent=2))
+    return 0
 
 
 def _run_dji_probe(args: argparse.Namespace) -> int:
@@ -264,6 +348,12 @@ def main(argv: list[str] | None = None) -> int:
         from .application.desktop import launch
 
         return launch()
+    if args.command == "profiles":
+        return _run_profiles()
+    if args.command == "validate-synthetic":
+        return _run_synthetic_validation()
+    if args.command == "inspect":
+        return _run_inspect(args)
     if args.command == "dji-probe":
         return _run_dji_probe(args)
     if args.command == "geotiff-probe":
