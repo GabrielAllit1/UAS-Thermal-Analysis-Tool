@@ -23,12 +23,7 @@ def _tag_value(tags: Mapping[str, str], keys: tuple[str, ...]) -> str | None:
 
 
 def masked_band_to_float(values: np.ndarray) -> np.ndarray:
-    """Convert a rasterio/numpy masked band to float while preserving nodata as NaN.
-
-    Rasterio commonly returns integer masked arrays for radiometric GeoTIFF exports. Calling
-    ``filled(np.nan)`` on an integer masked array raises because NaN cannot be represented by the
-    integer dtype. Cast first, then fill, so nodata survives as NaN without corrupting valid samples.
-    """
+    """Convert a masked raster band to float while preserving nodata as NaN."""
 
     masked = np.ma.asarray(values)
     return np.asarray(masked.astype(np.float64).filled(np.nan), dtype=np.float64)
@@ -135,6 +130,39 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
 
     def can_read(self, path: Path) -> bool:
         return path.suffix.lower() in {".tif", ".tiff"}
+
+    def source_diagnostics(self, path: Path) -> dict[str, object]:
+        try:
+            import rasterio
+        except ImportError as exc:
+            raise AdapterUnavailableError("Install the geospatial extra to read GeoTIFF files") from exc
+
+        with rasterio.open(path) as source:
+            sample = source.read(
+                1,
+                out_shape=(min(source.height, 512), min(source.width, 512)),
+                masked=True,
+            )
+            sample_values = masked_band_to_float(sample)
+            finite = sample_values[np.isfinite(sample_values)]
+            return {
+                "driver": source.driver,
+                "width": source.width,
+                "height": source.height,
+                "count": source.count,
+                "dtype": str(source.dtypes[0]),
+                "nodata": source.nodata,
+                "scales": [float(value) for value in source.scales],
+                "offsets": [float(value) for value in source.offsets],
+                "crs": None if source.crs is None else str(source.crs),
+                "transform": [float(value) for value in tuple(source.transform)[:6]],
+                "tags": source.tags(),
+                "sidecars": _sidecar_metadata(path),
+                "sample_masked_pixels": int(np.count_nonzero(np.ma.getmaskarray(sample))),
+                "sample_min_raw": None if finite.size == 0 else float(np.min(finite)),
+                "sample_max_raw": None if finite.size == 0 else float(np.max(finite)),
+                "sample_median_raw": None if finite.size == 0 else float(np.median(finite)),
+            }
 
     def read(self, path: Path, calibration: ThermalCalibration) -> ThermalFrame:
         try:
