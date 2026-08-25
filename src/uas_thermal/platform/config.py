@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -12,7 +12,11 @@ class AppConfig:
     dji_sdk_dir: Path | None = None
 
     @classmethod
-    def from_env(cls) -> "AppConfig":
+    def from_env(cls) -> AppConfig:
         data = Path(os.environ.get("UAS_THERMAL_DATA_DIR", Path.home() / ".uas-thermal"))
         sdk = os.environ.get("UAS_THERMAL_DJI_SDK_DIR")
-        return cls(data_dir=data, log_level=os.environ.get("UAS_THERMAL_LOG_LEVEL", "INFO"), dji_sdk_dir=Path(sdk) if sdk else None)
+        return cls(
+            data_dir=data,
+            log_level=os.environ.get("UAS_THERMAL_LOG_LEVEL", "INFO"),
+            dji_sdk_dir=Path(sdk) if sdk else None,
+        )

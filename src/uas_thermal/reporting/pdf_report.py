@@ -16,7 +16,7 @@ def write_pdf(result: InspectionResult, path: str | Path, title: str = "Thermal 
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     pdf = canvas.Canvas(str(destination), pagesize=letter)
-    width, height = letter
+    _, height = letter
     pdf.setTitle(title)
     pdf.setFont("Helvetica-Bold", 18)
     pdf.drawString(54, height - 60, title)
@@ -33,7 +33,11 @@ def write_pdf(result: InspectionResult, path: str | Path, title: str = "Thermal 
         pdf.drawString(54, y, f"Finding {index} · {finding.severity.value.upper()}")
         y -= 14
         pdf.setFont("Helvetica", 9)
-        pdf.drawString(66, y, f"Max {finding.max_temperature_c:.1f} °C · ΔT {finding.delta_temperature_c:.1f} °C · Area {finding.area_px} px")
+        pdf.drawString(
+            66,
+            y,
+            f"Max {finding.max_temperature_c:.1f} °C · ΔT {finding.delta_temperature_c:.1f} °C · Area {finding.area_px} px",
+        )
         y -= 13
         recommendation = maintenance_recommendation(finding)
         pdf.drawString(66, y, recommendation[:100])

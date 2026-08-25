@@ -14,8 +14,12 @@ class WorldFile:
     y_center: float
 
     @classmethod
-    def load(cls, path: str | Path) -> "WorldFile":
-        values = [float(line.strip()) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+    def load(cls, path: str | Path) -> WorldFile:
+        values = [
+            float(line.strip())
+            for line in Path(path).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         if len(values) != 6:
             raise ValueError("world file must contain exactly six numeric lines")
         return cls(*values)

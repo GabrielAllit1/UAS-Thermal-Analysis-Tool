@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..inspections.models import InspectionResult
@@ -13,10 +13,10 @@ from ..thermal.statistics import summarize_temperature
 @dataclass(slots=True)
 class AnalysisWorkflow:
     registry: AdapterRegistry
-    detection: DetectionConfig = DetectionConfig()
+    detection: DetectionConfig = field(default_factory=DetectionConfig)
 
     @classmethod
-    def default(cls) -> "AnalysisWorkflow":
+    def default(cls) -> AnalysisWorkflow:
         return cls(default_registry())
 
     def analyze(

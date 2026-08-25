@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from collections import deque
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -23,7 +23,12 @@ def _components(mask: np.ndarray, connectivity: int) -> list[list[tuple[int, int
     if connectivity == 4:
         offsets = ((-1, 0), (1, 0), (0, -1), (0, 1))
     elif connectivity == 8:
-        offsets = tuple((dr, dc) for dr in (-1, 0, 1) for dc in (-1, 0, 1) if dr or dc)
+        offsets = tuple(
+            (dr, dc)
+            for dr in (-1, 0, 1)
+            for dc in (-1, 0, 1)
+            if dr or dc
+        )
     else:
         raise ValueError("connectivity must be 4 or 8")
 
@@ -39,7 +44,12 @@ def _components(mask: np.ndarray, connectivity: int) -> list[list[tuple[int, int
             component.append((r, c))
             for dr, dc in offsets:
                 nr, nc = r + dr, c + dc
-                if 0 <= nr < rows and 0 <= nc < cols and mask[nr, nc] and not seen[nr, nc]:
+                if (
+                    0 <= nr < rows
+                    and 0 <= nc < cols
+                    and mask[nr, nc]
+                    and not seen[nr, nc]
+                ):
                     seen[nr, nc] = True
                     queue.append((nr, nc))
         found.append(component)
@@ -48,9 +58,11 @@ def _components(mask: np.ndarray, connectivity: int) -> list[list[tuple[int, int
 
 def detect_anomalies(
     temperature_c: np.ndarray,
-    config: DetectionConfig = DetectionConfig(),
-    severity_policy: SeverityPolicy = SeverityPolicy(),
+    config: DetectionConfig | None = None,
+    severity_policy: SeverityPolicy | None = None,
 ) -> list[Finding]:
+    config = config or DetectionConfig()
+    severity_policy = severity_policy or SeverityPolicy()
     values = np.asarray(temperature_c, dtype=float)
     finite = values[np.isfinite(values)]
     if finite.size == 0:
@@ -74,8 +86,8 @@ def detect_anomalies(
         severity = severity_policy.classify(delta)
         findings.append(
             Finding(
-                center_x=int(round(float(np.mean(cc)))),
-                center_y=int(round(float(np.mean(rr)))),
+                center_x=round(float(np.mean(cc))),
+                center_y=round(float(np.mean(rr))),
                 area_px=len(component),
                 max_temperature_c=max_temp,
                 mean_temperature_c=float(np.mean(temps)),

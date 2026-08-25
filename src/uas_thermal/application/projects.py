@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 import json
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +15,7 @@ class Project:
     operator: str = ""
     notes: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def save(self, path: str | Path) -> Path:
         destination = Path(path)
@@ -24,5 +24,5 @@ class Project:
         return destination
 
     @classmethod
-    def load(cls, path: str | Path) -> "Project":
+    def load(cls, path: str | Path) -> Project:
         return cls(**json.loads(Path(path).read_text(encoding="utf-8")))
