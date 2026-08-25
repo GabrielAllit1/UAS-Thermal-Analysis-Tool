@@ -53,6 +53,7 @@ jobs:
           tests/test_model_router.py
           tests/test_runtime_monitor.py
           tests/test_frontier_workspace.py
+          tests/test_one_click_workspace.py
       - run: python scripts/smoke_workspace.py
       - run: python scripts/capture_workspace_qa.py --output-dir build/ui-qa
       - uses: actions/upload-artifact@v4

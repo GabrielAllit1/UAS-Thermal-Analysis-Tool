@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uas-thermal-analysis"
-version = "0.9.1"
+version = "0.10.0"
 description = "Local-first AI-assisted autonomous thermal processing, inspection and geospatial intelligence platform"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -63,3 +63,4 @@ select = ["E4", "E7", "E9", "F", "B", "UP", "RUF"]
 "src/uas_thermal/application/workspace_ui_v3.py" = ["F401"]
 "src/uas_thermal/application/workspace_ui_v4.py" = ["RUF001"]
 "src/uas_thermal/application/workspace_ui_v5.py" = ["F401", "RUF001"]
+"src/uas_thermal/application/workspace_ui_v6.py" = ["F401", "RUF001"]
