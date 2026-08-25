@@ -7,10 +7,11 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from uas_thermal.application.desktop import DesktopSession
-from uas_thermal.application.workspace_ui_v2 import create_workspace_window
+from uas_thermal.application.workspace_ui_v3 import create_workspace_window
 
 
 SIZES = ((1280, 720), (1440, 900), (1920, 1080))
+PAGES = ("Overview", "Explore", "Process", "Measurements")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,12 +24,15 @@ def main(argv: list[str] | None = None) -> int:
     window.show()
     for width, height in SIZES:
         window.resize(width, height)
-        app.processEvents()
-        destination = args.output_dir / f"workspace-{width}x{height}.png"
-        if not window.grab().save(str(destination), "PNG"):
-            raise RuntimeError(f"failed to capture {destination}")
-        if destination.stat().st_size <= 0:
-            raise RuntimeError(f"empty visual QA capture: {destination}")
+        for page in PAGES:
+            index = window.page_index[page]
+            window.nav.setCurrentRow(index)
+            app.processEvents()
+            destination = args.output_dir / f"{page.lower()}-{width}x{height}.png"
+            if not window.grab().save(str(destination), "PNG"):
+                raise RuntimeError(f"failed to capture {destination}")
+            if destination.stat().st_size <= 0:
+                raise RuntimeError(f"empty visual QA capture: {destination}")
     window.close()
     app.processEvents()
     return 0

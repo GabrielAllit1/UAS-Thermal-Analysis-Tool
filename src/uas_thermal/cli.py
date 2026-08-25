@@ -18,6 +18,44 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("profiles", help="List supported versioned inspection profiles")
     sub.add_parser("validate-synthetic", help="Run deterministic contextual detector validation")
     sub.add_parser("validation-sources", help="List external radiometric validation datasets")
+    sub.add_parser("ai-models", help="List locally installed Ollama models and capabilities")
+    sub.add_parser("orthomosaic-status", help="Show local thermal orthomosaic backend availability")
+
+    process = sub.add_parser(
+        "process",
+        help=(
+            "Run the universal thermal post-processing pipeline: optional stitching, quantitative "
+            "analysis, optional local AI enrichment, annotation, reporting and client deliverable"
+        ),
+    )
+    process.add_argument("sources", type=Path, nargs="+")
+    process.add_argument("--output-dir", type=Path, required=True)
+    process.add_argument("--project", default="Untitled inspection")
+    process.add_argument("--site", default="")
+    process.add_argument("--client", default="")
+    process.add_argument("--inspection-id", default="")
+    process.add_argument("--profile", default="generic-thermal")
+    process.add_argument("--adapter", default=None)
+    process.add_argument("--stitch", choices=("auto", "on", "off"), default="auto")
+    process.add_argument(
+        "--orthomosaic-backend",
+        choices=("auto", "native-geotiff", "opendronemap"),
+        default="auto",
+    )
+    process.add_argument(
+        "--ai",
+        default="off",
+        help="off, auto, or an installed local Ollama model name",
+    )
+    process.add_argument("--palette", default="ironbow")
+    process.add_argument("--span-c", type=float, default=None)
+    process.add_argument("--level-c", type=float, default=None)
+    process.add_argument("--isotherm-min-c", type=float, default=None)
+    process.add_argument("--isotherm-max-c", type=float, default=None)
+    process.add_argument("--emissivity", type=float, default=0.95)
+    process.add_argument("--distance-m", type=float, default=5.0)
+    process.add_argument("--humidity", type=float, default=0.50)
+    process.add_argument("--reflected-c", type=float, default=20.0)
 
     inspect = sub.add_parser(
         "inspect",
@@ -70,36 +108,150 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _run_inspect(args: argparse.Namespace) -> int:
-    from .application.orchestrator import AutonomousInspectionOrchestrator
+def _project_from_args(args: argparse.Namespace):
     from .application.projects import Project
-    from .inspections.profiles import get_profile
-    from .thermal.calibration import ThermalCalibration
 
-    sources = [source.expanduser().resolve() for source in args.sources]
-    missing = [str(source) for source in sources if not source.is_file()]
-    if missing:
-        print(json.dumps({"ok": False, "missing_sources": missing}, indent=2), file=sys.stderr)
-        return 2
-    project = Project(
+    return Project(
         name=args.project,
         site=args.site,
         client=args.client,
         inspection_id=args.inspection_id,
         profile_id=args.profile,
     )
-    calibration = ThermalCalibration(
+
+
+def _calibration_from_args(args: argparse.Namespace):
+    from .thermal.calibration import ThermalCalibration
+
+    return ThermalCalibration(
         emissivity=args.emissivity,
         distance_m=args.distance_m,
         relative_humidity=args.humidity,
         reflected_temperature_c=args.reflected_c,
     )
+
+
+def _run_process(args: argparse.Namespace) -> int:
+    from .application.universal_pipeline import UniversalProcessingPlan, UniversalThermalProcessor
+    from .inspections.profiles import get_profile
+    from .thermal.presentation import ThermalStyle
+
+    sources = [source.expanduser().resolve() for source in args.sources]
+    missing = [str(source) for source in sources if not source.is_file()]
+    if missing:
+        print(json.dumps({"ok": False, "missing_sources": missing}, indent=2), file=sys.stderr)
+        return 2
+    events: list[str] = []
+    try:
+        style = ThermalStyle(
+            palette=args.palette,
+            span_c=args.span_c,
+            level_c=args.level_c,
+            isotherm_min_c=args.isotherm_min_c,
+            isotherm_max_c=args.isotherm_max_c,
+        )
+        plan = UniversalProcessingPlan(
+            stitch_mode=args.stitch,
+            orthomosaic_backend=args.orthomosaic_backend,
+            ai_mode=args.ai,
+            thermal_style=style,
+        )
+        project = _project_from_args(args)
+        result = UniversalThermalProcessor().process(
+            project,
+            sources,
+            args.output_dir,
+            calibration=_calibration_from_args(args),
+            profile=get_profile(args.profile),
+            plan=plan,
+            adapter_name=args.adapter,
+            on_event=events.append,
+        )
+    except Exception as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "events": events,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    print(json.dumps({"ok": True, "events": events, **result.as_dict()}, indent=2))
+    return 0
+
+
+def _run_ai_models() -> int:
+    from .ai.ollama import OllamaProvider
+    from .platform.config import AppConfig
+
+    config = AppConfig.from_env()
+    provider = OllamaProvider(config.ollama_base_url)
+    if not provider.available():
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "provider": provider.name,
+                    "base_url": config.ollama_base_url,
+                    "error": "Ollama is not reachable",
+                },
+                indent=2,
+            )
+        )
+        return 1
+    try:
+        models = provider.list_models()
+    except Exception as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error_type": type(exc).__name__, "error": str(exc)},
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "provider": provider.name,
+                "base_url": config.ollama_base_url,
+                "models": [asdict(model) for model in models],
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
+def _run_orthomosaic_status() -> int:
+    from .orthomosaic import OrthomosaicService
+
+    print(json.dumps({"backends": OrthomosaicService().status()}, indent=2))
+    return 0
+
+
+def _run_inspect(args: argparse.Namespace) -> int:
+    from .application.orchestrator import AutonomousInspectionOrchestrator
+    from .inspections.profiles import get_profile
+
+    sources = [source.expanduser().resolve() for source in args.sources]
+    missing = [str(source) for source in sources if not source.is_file()]
+    if missing:
+        print(json.dumps({"ok": False, "missing_sources": missing}, indent=2), file=sys.stderr)
+        return 2
+    project = _project_from_args(args)
     try:
         profile = get_profile(args.profile)
         run = AutonomousInspectionOrchestrator().analyze_inspection(
             project,
             sources,
-            calibration=calibration,
+            calibration=_calibration_from_args(args),
             adapter_name=args.adapter,
             profile=profile,
             output_dir=args.output_dir,
@@ -358,6 +510,12 @@ def main(argv: list[str] | None = None) -> int:
         return _run_synthetic_validation()
     if args.command == "validation-sources":
         return _run_validation_sources()
+    if args.command == "ai-models":
+        return _run_ai_models()
+    if args.command == "orthomosaic-status":
+        return _run_orthomosaic_status()
+    if args.command == "process":
+        return _run_process(args)
     if args.command == "inspect":
         return _run_inspect(args)
     if args.command == "dji-probe":

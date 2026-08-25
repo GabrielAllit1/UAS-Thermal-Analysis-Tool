@@ -60,6 +60,74 @@ _PROFILES = {
         recommendation_moderate="Correlate the thermal pattern with roof/envelope construction and moisture verification methods.",
         recommendation_critical="Prioritize field investigation of the affected envelope area before repair decisions.",
     ),
+    "construction": InspectionProfile(
+        "construction",
+        "Construction / Building Performance",
+        minimum_delta_c=5.0,
+        minimum_area_px=30,
+        moderate_delta_c=10.0,
+        critical_delta_c=20.0,
+        finding_label="Construction thermal anomaly",
+        recommendation_moderate=(
+            "Correlate the thermal pattern with drawings, materials, weather, moisture testing, "
+            "and field observations before assigning a construction cause."
+        ),
+        recommendation_critical=(
+            "Prioritize field verification of the affected building area and document corroborating "
+            "evidence before corrective work."
+        ),
+    ),
+    "agriculture": InspectionProfile(
+        "agriculture",
+        "Agriculture / Crop Thermal Survey",
+        minimum_delta_c=4.0,
+        minimum_area_px=36,
+        moderate_delta_c=8.0,
+        critical_delta_c=15.0,
+        finding_label="Agricultural thermal anomaly",
+        recommendation_moderate=(
+            "Correlate canopy/soil temperature patterns with irrigation, crop condition, weather, "
+            "multispectral data, and representative field checks."
+        ),
+        recommendation_critical=(
+            "Prioritize field verification of the affected area; thermal contrast alone does not "
+            "establish crop stress, disease, or irrigation failure."
+        ),
+    ),
+    "public-safety": InspectionProfile(
+        "public-safety",
+        "Public Safety Thermal Survey",
+        minimum_delta_c=5.0,
+        minimum_area_px=12,
+        moderate_delta_c=12.0,
+        critical_delta_c=25.0,
+        finding_label="Public-safety thermal observation",
+        recommendation_moderate=(
+            "Use the thermal observation as location-priority information and verify with authorized "
+            "on-scene procedures and additional sensors where appropriate."
+        ),
+        recommendation_critical=(
+            "Escalate the observation for prompt on-scene verification under the applicable incident "
+            "command and safety procedures; thermal imagery alone does not identify a person or cause."
+        ),
+    ),
+    "natural-resources": InspectionProfile(
+        "natural-resources",
+        "Natural Resources / Environmental Thermal Survey",
+        minimum_delta_c=4.0,
+        minimum_area_px=36,
+        moderate_delta_c=10.0,
+        critical_delta_c=20.0,
+        finding_label="Environmental thermal anomaly",
+        recommendation_moderate=(
+            "Correlate the thermal pattern with terrain, water, vegetation, weather, season, and "
+            "field observations before assigning an environmental interpretation."
+        ),
+        recommendation_critical=(
+            "Prioritize field verification of the affected area and preserve geospatial/thermal "
+            "evidence for domain-specialist review."
+        ),
+    ),
     "mechanical": InspectionProfile(
         "mechanical",
         "Mechanical",
