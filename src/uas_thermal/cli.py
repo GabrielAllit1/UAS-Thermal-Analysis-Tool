@@ -107,7 +107,6 @@ def _run_dji_probe(args: argparse.Namespace) -> int:
 
 def _run_geotiff_probe(args: argparse.Namespace) -> int:
     from .sensors.generic import GenericGeoTiffAdapter
-    from .thermal.calibration import ThermalCalibration
     from .thermal.statistics import summarize_temperature
 
     source = args.source.expanduser().resolve()
@@ -132,39 +131,60 @@ def _run_geotiff_probe(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2), file=sys.stderr)
         return 1
 
+    base_payload = {
+        "source": str(source),
+        "adapter": adapter.name,
+        **diagnostics,
+        "requested_unit": args.unit,
+        "requested_scale": args.scale,
+        "requested_offset": args.offset,
+        "probe_mode": "bounded-sample",
+    }
+
     try:
-        frame = adapter.read(source, ThermalCalibration())
-        stats = summarize_temperature(frame.temperature_c)
+        sample_temperature, encoding = adapter.sample_temperature(source)
+        stats = summarize_temperature(sample_temperature)
     except Exception as exc:
         payload = {
             "ok": False,
-            "source": str(source),
-            "adapter": adapter.name,
-            **diagnostics,
-            "requested_unit": args.unit,
-            "requested_scale": args.scale,
-            "requested_offset": args.offset,
+            **base_payload,
             "error_type": type(exc).__name__,
             "error": str(exc),
-            "hint": (
+        }
+        if not diagnostics.get("radiometric_candidate", True):
+            payload["hint"] = (
+                "This raster appears to be rendered/uncalibrated imagery, not scalar temperature "
+                "data. Use the original radiometric source, a calibrated single-band thermal "
+                "GeoTIFF, or the original camera R-JPEG rather than forcing a temperature unit."
+            )
+        elif diagnostics.get("requires_tiled_processing"):
+            payload["hint"] = (
+                "The file is too large for the current full-frame analyzer. The probe is safe, "
+                "but production analysis requires radiometric tiles or the planned tiled-mosaic "
+                "workflow."
+            )
+        else:
+            payload["hint"] = (
                 "Do not guess thermal units. If the export documentation identifies the raster "
                 "encoding, retry with --unit and, only when specified, --scale/--offset."
-            ),
-        }
+            )
         print(json.dumps(payload, indent=2), file=sys.stderr)
         return 1
 
     payload = {
         "ok": True,
-        "source": str(source),
-        "adapter": adapter.name,
-        **diagnostics,
-        "resolved_scale": frame.metadata.get("scale"),
-        "resolved_offset": frame.metadata.get("offset"),
-        "resolved_input_unit": frame.metadata.get("input_unit"),
-        "temperature": asdict(stats),
-        "display_rgb": frame.display_rgb is not None,
+        **base_payload,
+        "resolved_scale": encoding.get("scale"),
+        "resolved_offset": encoding.get("offset"),
+        "resolved_input_unit": encoding.get("input_unit"),
+        "sample_temperature": asdict(stats),
+        "full_frame_analysis_ready": not bool(diagnostics.get("requires_tiled_processing")),
     }
+    if diagnostics.get("requires_tiled_processing"):
+        payload["analysis_warning"] = (
+            "Radiometry can be sampled, but this raster exceeds the current full-frame analysis "
+            "limit and requires tiled processing."
+        )
     sidecars = diagnostics.get("sidecars", {})
     if diagnostics.get("crs") is None and isinstance(sidecars, dict):
         if sidecars.get("world_file") and not sidecars.get("projection"):
