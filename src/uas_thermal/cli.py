@@ -40,6 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
     geotiff_probe.add_argument("--unit", default="auto")
     geotiff_probe.add_argument("--scale", type=float, default=1.0)
     geotiff_probe.add_argument("--offset", type=float, default=0.0)
+
+    display_probe = sub.add_parser(
+        "display-probe",
+        help="Read a bounded GeoTIFF display preview without loading the full raster",
+    )
+    display_probe.add_argument("source", type=Path, help="Path to a GeoTIFF or TIFF")
+    display_probe.add_argument("--max-edge", type=int, default=1600)
     return parser
 
 
@@ -196,6 +203,52 @@ def _run_geotiff_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_display_probe(args: argparse.Namespace) -> int:
+    from .geospatial.display import read_display_raster
+    from .sensors.generic import GenericGeoTiffAdapter
+
+    source = args.source.expanduser().resolve()
+    if not source.is_file():
+        print(
+            json.dumps({"ok": False, "error": f"source not found: {source}"}, indent=2),
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        display = read_display_raster(source, max_edge=args.max_edge)
+        diagnostics = GenericGeoTiffAdapter().source_diagnostics(source)
+    except Exception as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "source": str(source),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+                indent=2,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+    payload = {
+        "ok": True,
+        "source": str(source),
+        "mode": "display-gis",
+        "preview_shape": list(display.rgb.shape),
+        "bounded_preview": True,
+        "radiometric_candidate": diagnostics.get("radiometric_candidate"),
+        "radiometric_reasons": diagnostics.get("radiometric_reasons"),
+        "requires_tiled_processing": diagnostics.get("requires_tiled_processing"),
+        "pixel_count": diagnostics.get("pixel_count"),
+        "crs": display.crs,
+        "metadata": display.metadata,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command in (None, "info"):
@@ -215,4 +268,6 @@ def main(argv: list[str] | None = None) -> int:
         return _run_dji_probe(args)
     if args.command == "geotiff-probe":
         return _run_geotiff_probe(args)
+    if args.command == "display-probe":
+        return _run_display_probe(args)
     return 2
