@@ -14,6 +14,7 @@ from ..inspections.models import Finding
 from ..thermal.presentation import ThermalStyle, render_with_style
 from .json_report import finding_payload
 from .package import write_inspection_package
+from .thermograms import write_tuned_thermograms
 
 if TYPE_CHECKING:
     from ..application.orchestrator import InspectionRun
@@ -76,7 +77,14 @@ def _overview_image(
         )
         x = max(0, box[0])
         y = max(0, box[1] - 16)
-        draw.text((x + 2, y + 2), label, fill=(255, 255, 255), font=font, stroke_width=2, stroke_fill=(0, 0, 0))
+        draw.text(
+            (x + 2, y + 2),
+            label,
+            fill=(255, 255, 255),
+            font=font,
+            stroke_width=2,
+            stroke_fill=(0, 0, 0),
+        )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image.save(output_path)
     return output_path
@@ -92,20 +100,22 @@ def _client_html(run: InspectionRun, overview_name: str, output_path: Path) -> P
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{project_name} - Thermal Deliverable</title>
+<title>{project_name} - Thermal Intelligence Deliverable</title>
 <style>
-body{{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#0f151c;color:#e9eef3}}
-header{{padding:22px 28px;background:#17212b;border-bottom:1px solid #31404e}}
+body{{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#071019;color:#e9f4fb}}
+header{{padding:22px 28px;background:#0b1b27;border-bottom:1px solid #174158}}
+.brand{{font-size:11px;letter-spacing:1.6px;color:#56d7ff;font-weight:800}}
 main{{display:grid;grid-template-columns:minmax(0,2fr) minmax(360px,1fr);gap:18px;padding:20px}}
-.card{{background:#18212b;border:1px solid #334251;border-radius:8px;padding:14px}}
+.card{{background:#0d1c27;border:1px solid #24475c;border-radius:10px;padding:14px}}
 img{{width:100%;height:auto;background:#080c10}}
-table{{width:100%;border-collapse:collapse;font-size:13px}}th,td{{padding:8px;border-bottom:1px solid #334251;text-align:left}}
-select,input{{background:#111820;color:#e9eef3;border:1px solid #405264;padding:7px;border-radius:4px}}
+table{{width:100%;border-collapse:collapse;font-size:13px}}th,td{{padding:8px;border-bottom:1px solid #29475a;text-align:left}}
+select,input{{background:#07131c;color:#e9eef3;border:1px solid #405e70;padding:7px;border-radius:4px}}
 .small{{color:#9bacba;font-size:12px}}.critical{{color:#ff6868}}.moderate{{color:#ffb24d}}.minor{{color:#ffe36a}}
+.ai{{border-left:3px solid #56d7ff;padding-left:10px;margin-top:10px;color:#c8edf9}}
 @media(max-width:900px){{main{{grid-template-columns:1fr}}}}
 </style></head>
 <body>
-<header><h1>{project_name}</h1><div>{site}</div><div class="small">Automated thermal inspection intelligence. Not thermographer certification.</div></header>
+<header><div class="brand">UAS THERMAL INTELLIGENCE · AUTONOMOUS DELIVERABLE</div><h1>{project_name}</h1><div>{site}</div><div class="small">Automated thermal inspection intelligence. Not thermographer certification.</div></header>
 <main>
 <section class="card"><img src="../maps/{html.escape(overview_name)}" alt="Annotated thermal overview"></section>
 <section class="card">
@@ -116,7 +126,8 @@ select,input{{background:#111820;color:#e9eef3;border:1px solid #405264;padding:
 <script>
 const findings={embedded};
 const rows=document.getElementById('rows'),detail=document.getElementById('detail');
-function draw(){{const sev=document.getElementById('severity').value,q=document.getElementById('search').value.toLowerCase();rows.innerHTML='';findings.filter(f=>(!sev||f.severity===sev)&&(!q||JSON.stringify(f).toLowerCase().includes(q))).forEach(f=>{{const tr=document.createElement('tr');tr.innerHTML=`<td>${{f.finding_id||''}}</td><td>${{f.classification||f.finding_type||''}}</td><td class="${{f.severity}}">${{f.severity}}</td><td>${{Number(f.max_temperature_c).toFixed(1)}} C</td><td>${{Number(f.delta_temperature_c).toFixed(1)}} C</td>`;tr.onclick=()=>{{const ai=f.ai_enrichment&&f.ai_enrichment.summary?`<br><b>AI-assisted context:</b> ${{f.ai_enrichment.summary}}`:'';detail.innerHTML=`<b>${{f.finding_id}}</b><br>${{f.classification||f.finding_type}}<br><b>Evidence:</b> ${{(f.evidence||[]).join('; ')}}<br><b>Recommended action:</b> ${{f.recommendation||''}}${{ai}}<br><br>AI text is supplemental; quantitative radiometry and finding severity come from the deterministic analysis pipeline.`}};rows.appendChild(tr)}})}}
+function esc(v){{const e=document.createElement('div');e.textContent=String(v??'');return e.innerHTML}}
+function draw(){{const sev=document.getElementById('severity').value,q=document.getElementById('search').value.toLowerCase();rows.innerHTML='';findings.filter(f=>(!sev||f.severity===sev)&&(!q||JSON.stringify(f).toLowerCase().includes(q))).forEach(f=>{{const tr=document.createElement('tr');tr.innerHTML=`<td>${{esc(f.finding_id||'')}}</td><td>${{esc(f.classification||f.finding_type||'')}}</td><td class="${{esc(f.severity)}}">${{esc(f.severity)}}</td><td>${{Number(f.max_temperature_c).toFixed(1)}} C</td><td>${{Number(f.delta_temperature_c).toFixed(1)}} C</td>`;tr.onclick=()=>{{const ai=f.ai_enrichment&&f.ai_enrichment.summary?`<div class="ai"><b>AI-assisted context:</b> ${{esc(f.ai_enrichment.summary)}}<br><span class="small">Supplemental interpretation only; deterministic radiometry remains authoritative.</span></div>`:'';detail.innerHTML=`<b>${{esc(f.finding_id)}}</b><br>${{esc(f.classification||f.finding_type)}}<br><b>Evidence:</b> ${{esc((f.evidence||[]).join('; '))}}<br><b>Recommended action:</b> ${{esc(f.recommendation||'')}}${{ai}}`}};rows.appendChild(tr)}})}}
 document.getElementById('severity').onchange=draw;document.getElementById('search').oninput=draw;draw();
 </script></body></html>""",
         encoding="utf-8",
@@ -137,7 +148,7 @@ def _refresh_manifest(root: Path, metadata: dict[str, Any]) -> None:
         for path in root.rglob("*")
         if path.is_file() and path != manifest_path
     ]
-    manifest["schema_version"] = "1.1"
+    manifest["schema_version"] = "1.2"
     manifest["deliverable"] = metadata
     manifest["files"] = {
         str(path.relative_to(root)).replace("\\", "/"): {
@@ -163,6 +174,7 @@ def write_client_deliverable(
     maps_dir = root / "maps"
     viewer_dir = root / "viewer"
     report_dir = root / "report"
+    thermogram_dir = maps_dir / "thermograms"
     maps_dir.mkdir(exist_ok=True)
     viewer_dir.mkdir(exist_ok=True)
     report_dir.mkdir(exist_ok=True)
@@ -182,8 +194,10 @@ def write_client_deliverable(
         overview_path,
         active_style,
     )
+    thermograms = write_tuned_thermograms(run.artifacts, thermogram_dir, style=active_style)
     _client_html(run, overview_path.name, viewer_dir / "index.html")
 
+    metadata = processing_metadata or {}
     processing = {
         "project": run.project.report_metadata(),
         "profile": run.profile.as_dict(),
@@ -196,11 +210,15 @@ def write_client_deliverable(
             "processing_report": None if orthomosaic.processing_report is None else str(orthomosaic.processing_report),
         },
         "thermal_style": active_style.as_dict(),
-        "ai": processing_metadata or {},
+        "calibration": metadata.get("calibration", {}),
+        "ai": metadata.get("ai", metadata),
+        "automation": metadata.get("automation", {}),
+        "rendered_thermograms": len(thermograms),
         "claim_boundary": (
             "AI-assisted interpretation is supplemental. Quantitative radiometry, finding geometry, "
             "severity and confidence are produced by deterministic authorities and require field "
-            "verification appropriate to the inspection domain."
+            "verification appropriate to the inspection domain. Thermal palettes and Span/Level affect "
+            "presentation only and never alter temperature measurements."
         ),
     }
     (report_dir / "processing_report.json").write_text(
@@ -210,10 +228,14 @@ def write_client_deliverable(
     _refresh_manifest(
         root,
         {
-            "type": "universal-thermal-client-engineering-package",
+            "type": "autonomous-thermal-intelligence-client-engineering-package",
             "overview": "maps/annotated_thermal_overview.png",
+            "thermograms": "maps/thermograms/thermogram_index.json",
             "viewer": "viewer/index.html",
             "processing_report": "report/processing_report.json",
+            "quantitative_orthomosaic": (
+                "maps/thermal_orthomosaic.tif" if orthomosaic is not None else None
+            ),
         },
     )
     return root

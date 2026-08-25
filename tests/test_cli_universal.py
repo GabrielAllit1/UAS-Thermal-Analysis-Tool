@@ -23,6 +23,8 @@ def test_process_parser_defaults_and_local_ai_option():
             "20",
             "--level-c",
             "40",
+            "--ambient-c",
+            "31.5",
         ]
     )
 
@@ -33,9 +35,11 @@ def test_process_parser_defaults_and_local_ai_option():
     assert args.ai == "auto"
     assert args.span_c == 20.0
     assert args.level_c == 40.0
+    assert args.ambient_c == 31.5
 
 
 def test_runtime_status_commands_are_registered():
     parser = build_parser()
     assert parser.parse_args(["ai-models"]).command == "ai-models"
     assert parser.parse_args(["orthomosaic-status"]).command == "orthomosaic-status"
+    assert parser.parse_args(["autopilot-status"]).command == "autopilot-status"

@@ -209,6 +209,7 @@ class UniversalThermalProcessor:
                 metadata={
                     "project_id": project.project_id,
                     "profile_id": active_profile.profile_id,
+                    "ambient_temperature_c": calibration.ambient_temperature_c,
                 },
             )
             try:
@@ -262,10 +263,21 @@ class UniversalThermalProcessor:
             orthomosaic=orthomosaic,
             style=active_plan.thermal_style,
             processing_metadata={
-                "provider": ai_provider,
-                "model": ai_model,
-                "enriched_findings": enriched,
-                "warnings": warnings,
+                "calibration": asdict(calibration),
+                "ai": {
+                    "provider": ai_provider,
+                    "model": ai_model,
+                    "enriched_findings": enriched,
+                    "requested_mode": active_plan.ai_mode,
+                },
+                "automation": {
+                    "stitch_mode": active_plan.stitch_mode,
+                    "orthomosaic_backend_requested": active_plan.orthomosaic_backend,
+                    "orthomosaic_backend_used": None if orthomosaic is None else orthomosaic.backend,
+                    "input_source_count": len(input_paths),
+                    "analysis_source_count": len(analysis_sources),
+                    "warnings": warnings,
+                },
             },
         )
         run.package_dir = deliverable

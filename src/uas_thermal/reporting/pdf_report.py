@@ -1,9 +1,34 @@
 from __future__ import annotations
 
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from ..inspections.models import InspectionResult
 from ..inspections.recommendations import maintenance_recommendation
+
+
+def _ai_context_html(enrichment: dict[str, object]) -> str:
+    summary = escape(str(enrichment.get("summary", "")).strip())
+    observations = [escape(str(item)) for item in enrichment.get("visual_observations", [])]
+    explanations = [escape(str(item)) for item in enrichment.get("possible_explanations", [])]
+    verification = [escape(str(item)) for item in enrichment.get("recommended_verification", [])]
+    limitations = [escape(str(item)) for item in enrichment.get("limitations", [])]
+    parts = ["<b>AI-assisted context (supplemental):</b>"]
+    if summary:
+        parts.append(summary)
+    if observations:
+        parts.append("<b>Visual observations:</b> " + "; ".join(observations))
+    if explanations:
+        parts.append("<b>Possible explanations:</b> " + "; ".join(explanations))
+    if verification:
+        parts.append("<b>Recommended verification:</b> " + "; ".join(verification))
+    if limitations:
+        parts.append("<b>AI limitations:</b> " + "; ".join(limitations))
+    parts.append(
+        "<i>AI text is interpretive assistance only. Quantitative radiometry, geometry, severity, "
+        "confidence and finding identity remain deterministic upstream authorities.</i>"
+    )
+    return "<br/>".join(parts)
 
 
 def write_pdf(
@@ -114,9 +139,9 @@ def write_pdf(
     quality_status = result.quality.get("status", "not recorded")
     story.append(Paragraph(f"Radiometric quality status: <b>{quality_status}</b>", styles["BodyText"]))
     for warning in result.quality.get("warnings", []):
-        story.append(Paragraph(f"• {warning}", styles["BodyText"]))
+        story.append(Paragraph(f"• {escape(str(warning))}", styles["BodyText"]))
     for reason in result.quality.get("reasons", []):
-        story.append(Paragraph(f"• Rejection reason: {reason}", styles["BodyText"]))
+        story.append(Paragraph(f"• Rejection reason: {escape(str(reason))}", styles["BodyText"]))
     story.append(Spacer(1, 12))
 
     story.extend([Paragraph("4. Findings Summary", styles["Heading2"]), Spacer(1, 4)])
@@ -159,26 +184,34 @@ def write_pdf(
     story.append(Paragraph("5. Detailed Findings", styles["Heading2"]))
     for index, finding in enumerate(result.findings, 1):
         finding_id = finding.finding_id or f"A-{index:03d}"
-        elements = [Paragraph(f"{finding_id} — {finding.severity.value.upper()}", styles["Heading3"])]
+        elements = [Paragraph(f"{escape(finding_id)} — {finding.severity.value.upper()}", styles["Heading3"])]
         plate_path = Path(finding.annotated_image_path).with_name("finding_plate.png") if finding.annotated_image_path else None
         if plate_path and plate_path.is_file():
             elements.append(Image(str(plate_path), width=6.6 * inch, height=4.4 * inch, kind="proportional"))
         reference = finding.reference_temperature_c
         if reference is None:
             reference = finding.baseline_temperature_c
-        evidence = "<br/>".join(f"• {item}" for item in finding.evidence[:6]) or "No additional evidence text recorded."
+        evidence = "<br/>".join(f"• {escape(str(item))}" for item in finding.evidence[:6]) or "No additional evidence text recorded."
         recommendation = finding.recommendation or maintenance_recommendation(finding)
         details = (
-            f"<b>Classification:</b> {finding.classification or finding.finding_type}<br/>"
+            f"<b>Classification:</b> {escape(finding.classification or finding.finding_type)}<br/>"
             f"<b>Confidence:</b> {finding.confidence.value.upper()}<br/>"
             f"<b>Maximum:</b> {finding.max_temperature_c:.1f} °C &nbsp; "
             f"<b>Reference:</b> {reference:.1f} °C &nbsp; "
             f"<b>ΔT:</b> {finding.delta_temperature_c:+.1f} °C<br/>"
-            f"<b>Reference method:</b> {finding.reference_method or 'not established'}<br/>"
+            f"<b>Reference method:</b> {escape(finding.reference_method or 'not established')}<br/>"
             f"<b>Evidence:</b><br/>{evidence}<br/>"
-            f"<b>Recommended action:</b> {recommendation}"
+            f"<b>Recommended action:</b> {escape(recommendation)}"
         )
-        elements.extend([Paragraph(details, styles["BodyText"]), Spacer(1, 12)])
+        elements.append(Paragraph(details, styles["BodyText"]))
+        if finding.ai_enrichment:
+            elements.extend(
+                [
+                    Spacer(1, 6),
+                    Paragraph(_ai_context_html(finding.ai_enrichment), styles["BodyText"]),
+                ]
+            )
+        elements.append(Spacer(1, 12))
         story.append(KeepTogether(elements))
 
     story.extend([Paragraph("6. Methodology", styles["Heading2"]), Spacer(1, 4)])
@@ -187,7 +220,8 @@ def write_pdf(
             "Radiometric sources are validated before quantitative use. Candidate regions are evaluated "
             "with local thermal references, multi-scale contextual contrast, robust scene evidence, "
             "spatial coherence and configured inspection-profile thresholds. Severity describes the "
-            "apparent thermal consequence under the active profile; confidence describes evidence strength.",
+            "apparent thermal consequence under the active profile; confidence describes evidence strength. "
+            "When enabled, local AI adds bounded interpretive context after canonical findings are established.",
             styles["BodyText"],
         )
     )
@@ -197,7 +231,8 @@ def write_pdf(
             "Automated findings are inspection intelligence, not thermographer certification. High "
             "temperature alone is not proof of a defect. Quantitative validity depends on source "
             "radiometry, calibration assumptions, environmental conditions, capture geometry and source "
-            "metadata. Geographic accuracy is limited by the source georeferencing authority.",
+            "metadata. Geographic accuracy is limited by the source georeferencing authority. AI-generated "
+            "text is supplemental and requires domain-appropriate verification.",
             styles["BodyText"],
         )
     )
