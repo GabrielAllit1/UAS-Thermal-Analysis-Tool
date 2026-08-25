@@ -12,11 +12,25 @@ from .provider import LocalAIModel, LocalAIProvider
 class OllamaProvider(LocalAIProvider):
     name = "ollama"
 
-    def __init__(self, base_url: str = "http://localhost:11434", *, timeout_s: float = 3.0):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        *,
+        probe_timeout_s: float = 3.0,
+        generation_timeout_s: float = 180.0,
+    ):
         self.base_url = base_url.rstrip("/")
-        self.timeout_s = float(timeout_s)
+        self.probe_timeout_s = float(probe_timeout_s)
+        self.generation_timeout_s = float(generation_timeout_s)
 
-    def _request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        timeout_s: float | None = None,
+    ) -> Any:
         body = None
         headers = {"Content-Type": "application/json"}
         if payload is not None:
@@ -28,7 +42,10 @@ class OllamaProvider(LocalAIProvider):
             headers=headers,
         )
         try:
-            with request.urlopen(outbound, timeout=self.timeout_s) as response:
+            with request.urlopen(
+                outbound,
+                timeout=self.probe_timeout_s if timeout_s is None else timeout_s,
+            ) as response:
                 return json.loads(response.read().decode("utf-8"))
         except (error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"Ollama request failed: {exc}") from exc
@@ -108,6 +125,7 @@ class OllamaProvider(LocalAIProvider):
                 "format": schema,
                 "options": {"temperature": 0},
             },
+            timeout_s=self.generation_timeout_s,
         )
         content = str((payload.get("message") or {}).get("content", "")).strip()
         if not content:
