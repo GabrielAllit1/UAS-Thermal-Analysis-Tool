@@ -173,7 +173,7 @@ def line_statistics(
         raise ValueError("width_px must be positive")
     length = hypot(float(x1) - float(x0), float(y1) - float(y0))
     if length == 0:
-        return spot_statistics(values, int(round(x0)), int(round(y0)), kernel_size=1)
+        return spot_statistics(values, round(x0), round(y0), kernel_size=1)
     yy, xx = np.indices(values.shape, dtype=np.float32)
     dx = float(x1) - float(x0)
     dy = float(y1) - float(y0)
