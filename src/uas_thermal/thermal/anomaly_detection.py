@@ -33,7 +33,7 @@ def _components(mask: np.ndarray, connectivity: int) -> list[list[tuple[int, int
         raise ValueError("connectivity must be 4 or 8")
 
     found: list[list[tuple[int, int]]] = []
-    for row, col in zip(*np.nonzero(mask)):
+    for row, col in zip(*np.nonzero(mask), strict=True):
         if seen[row, col]:
             continue
         queue = deque([(int(row), int(col))])
