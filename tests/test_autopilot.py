@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from uas_thermal.ai.provider import LocalAIModel, LocalAIProvider
+from uas_thermal.application import autopilot
 from uas_thermal.application.autopilot import autopilot_summary, scan_runtime, stage_for_event
 
 
@@ -36,6 +37,23 @@ def test_runtime_scan_exposes_local_ai_and_stitch_capabilities():
     assert snapshot.vision_models == ("vision-model",)
     assert snapshot.quantitative_stitch_available is True
     assert snapshot.preferred_ai_mode == "auto"
+
+
+def test_default_runtime_scan_uses_supported_ollama_probe_timeout(monkeypatch):
+    captured = {}
+
+    class CapturingProvider(FakeProvider):
+        def __init__(self, base_url, *, probe_timeout_s=3.0, generation_timeout_s=180.0):
+            captured["base_url"] = base_url
+            captured["probe_timeout_s"] = probe_timeout_s
+            captured["generation_timeout_s"] = generation_timeout_s
+
+    monkeypatch.setattr(autopilot, "OllamaProvider", CapturingProvider)
+    snapshot = scan_runtime(orthomosaics=FakeOrthomosaics())
+
+    assert snapshot.ai_available is True
+    assert captured["probe_timeout_s"] == 0.6
+    assert captured["generation_timeout_s"] == 180.0
 
 
 def test_autopilot_summary_is_operator_facing_and_source_aware():

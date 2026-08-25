@@ -34,7 +34,10 @@ def scan_runtime(
     """Inspect local AI and stitching runtimes without downloading or changing anything."""
 
     active_config = config or AppConfig.from_env()
-    active_provider = provider or OllamaProvider(active_config.ollama_base_url, timeout_s=0.6)
+    active_provider = provider or OllamaProvider(
+        active_config.ollama_base_url,
+        probe_timeout_s=0.6,
+    )
     active_orthomosaics = orthomosaics or OrthomosaicService()
     status = tuple(
         (str(item["name"]), bool(item["available"]))
