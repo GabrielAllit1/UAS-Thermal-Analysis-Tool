@@ -14,7 +14,13 @@ Use this source for:
 - validating image dimensions, finite temperature matrices, palette rendering, and calibration parameter handling;
 - comparing application output against DJI's own tools/test utilities where an authoritative expected result is available.
 
-Do **not** copy DJI SDK binaries or test images into this repository. Download the SDK directly from DJI, review/accept `License.txt`, keep it outside source control, and point local tests at the extracted fixture directory.
+Do **not** copy DJI SDK binaries or test images into this repository. Download the SDK directly from DJI, review/accept `License.txt`, keep it outside source control, and point local tests at one extracted R-JPEG:
+
+```powershell
+$env:UAS_THERMAL_DJI_SDK_DIR = "D:\validation\dji-tsdk\bin"
+$env:UAS_THERMAL_DJI_RJPEG = "D:\validation\dji-tsdk\dataset\sample.jpg"
+pytest tests/integration/test_external_radiometry.py -k dji -v
+```
 
 This source validates the DJI runtime boundary. It does not by itself prove field anomaly-detection accuracy or thermographer-equivalent diagnosis.
 
@@ -37,7 +43,12 @@ Use this source for:
 - thermal/visible geospatial review;
 - comparison of mapped temperatures with supplied in-situ measurements.
 
-The archive should remain in a local validation-data directory rather than Git. CC BY 4.0 permits reuse with attribution, but the repository should avoid carrying a 1.3 GB fixture.
+The archive should remain in a local validation-data directory rather than Git. CC BY 4.0 permits reuse with attribution, but the repository should avoid carrying a 1.3 GB fixture. Point the opt-in integration test at a Celsius surface-temperature GeoTIFF after extraction:
+
+```powershell
+$env:UAS_THERMAL_KANDERFIRN_TIFF = "D:\validation\kanderfirn\surface_temperature\kanderfirn_ts_2021-09-28_odm.tif"
+pytest tests/integration/test_external_radiometry.py -k kanderfirn -v
+```
 
 ## DJI Mavic 3 Thermal Lithuanian forest dataset
 
@@ -48,6 +59,15 @@ DOI: `10.5281/zenodo.17311327`
 The record describes Mavic 3 Thermal visual/thermal data, including MP4, SRT metadata and selected JPG thermal/visual images. It is useful for thermal-visible review, synchronized metadata experiments, and Mavic 3 Thermal modality coverage.
 
 The record page does not clearly declare a reusable license. Do not redistribute it or make it an automated dependency until rights are confirmed. The selected JPGs are also not assumed to be original radiometric R-JPEG files; they must pass the radiometric source gate before any quantitative claim.
+
+## Discover the configured source registry
+
+```powershell
+python -m uas_thermal validation-sources
+python scripts/list_validation_sources.py
+```
+
+Tests under `tests/integration/test_external_radiometry.py` skip unless the corresponding environment variable is configured, so normal CI never downloads third-party data or depends on vendor binaries.
 
 ## Claim boundary
 
