@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uas-thermal-analysis"
-version = "0.6.0"
-description = "Vendor-neutral autonomous thermal inspection and geospatial intelligence platform"
+version = "0.7.0"
+description = "Vendor-neutral autonomous thermal processing, inspection and geospatial intelligence platform"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "SALT19"}]
