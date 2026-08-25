@@ -16,16 +16,30 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("info", help="Show installed capabilities and adapter state")
     sub.add_parser("desktop", help="Launch the desktop application")
 
-    probe = sub.add_parser(
+    dji_probe = sub.add_parser(
         "dji-probe",
         help="Decode one DJI R-JPEG and print radiometric diagnostics as JSON",
     )
-    probe.add_argument("source", type=Path, help="Path to a DJI radiometric JPEG")
-    probe.add_argument("--emissivity", type=float, default=0.95)
-    probe.add_argument("--distance-m", type=float, default=5.0)
-    probe.add_argument("--humidity", type=float, default=0.50, help="Relative humidity as 0.0-1.0")
-    probe.add_argument("--reflected-c", type=float, default=20.0)
-    probe.add_argument("--palette", default="IRONRED")
+    dji_probe.add_argument("source", type=Path, help="Path to a DJI radiometric JPEG")
+    dji_probe.add_argument("--emissivity", type=float, default=0.95)
+    dji_probe.add_argument("--distance-m", type=float, default=5.0)
+    dji_probe.add_argument(
+        "--humidity",
+        type=float,
+        default=0.50,
+        help="Relative humidity as 0.0-1.0",
+    )
+    dji_probe.add_argument("--reflected-c", type=float, default=20.0)
+    dji_probe.add_argument("--palette", default="IRONRED")
+
+    geotiff_probe = sub.add_parser(
+        "geotiff-probe",
+        help="Inspect one thermal GeoTIFF and print raster/radiometric diagnostics as JSON",
+    )
+    geotiff_probe.add_argument("source", type=Path, help="Path to a thermal GeoTIFF")
+    geotiff_probe.add_argument("--unit", default="auto")
+    geotiff_probe.add_argument("--scale", type=float, default=1.0)
+    geotiff_probe.add_argument("--offset", type=float, default=0.0)
     return parser
 
 
@@ -91,6 +105,77 @@ def _run_dji_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_geotiff_probe(args: argparse.Namespace) -> int:
+    from .sensors.generic import GenericGeoTiffAdapter
+    from .thermal.calibration import ThermalCalibration
+    from .thermal.statistics import summarize_temperature
+
+    source = args.source.expanduser().resolve()
+    if not source.is_file():
+        print(
+            json.dumps({"ok": False, "error": f"source not found: {source}"}, indent=2),
+            file=sys.stderr,
+        )
+        return 2
+
+    adapter = GenericGeoTiffAdapter(scale=args.scale, offset=args.offset, unit=args.unit)
+    try:
+        diagnostics = adapter.source_diagnostics(source)
+    except Exception as exc:
+        payload = {
+            "ok": False,
+            "source": str(source),
+            "adapter": adapter.name,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
+        print(json.dumps(payload, indent=2), file=sys.stderr)
+        return 1
+
+    try:
+        frame = adapter.read(source, ThermalCalibration())
+        stats = summarize_temperature(frame.temperature_c)
+    except Exception as exc:
+        payload = {
+            "ok": False,
+            "source": str(source),
+            "adapter": adapter.name,
+            **diagnostics,
+            "requested_unit": args.unit,
+            "requested_scale": args.scale,
+            "requested_offset": args.offset,
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+            "hint": (
+                "Do not guess thermal units. If the export documentation identifies the raster "
+                "encoding, retry with --unit and, only when specified, --scale/--offset."
+            ),
+        }
+        print(json.dumps(payload, indent=2), file=sys.stderr)
+        return 1
+
+    payload = {
+        "ok": True,
+        "source": str(source),
+        "adapter": adapter.name,
+        **diagnostics,
+        "resolved_scale": frame.metadata.get("scale"),
+        "resolved_offset": frame.metadata.get("offset"),
+        "resolved_input_unit": frame.metadata.get("input_unit"),
+        "temperature": asdict(stats),
+        "display_rgb": frame.display_rgb is not None,
+    }
+    sidecars = diagnostics.get("sidecars", {})
+    if diagnostics.get("crs") is None and isinstance(sidecars, dict):
+        if sidecars.get("world_file") and not sidecars.get("projection"):
+            payload["geospatial_warning"] = (
+                "A world file supplies pixel placement but not a CRS. Add the matching .prj or "
+                "configure the source CRS before latitude/longitude export."
+            )
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command in (None, "info"):
@@ -108,4 +193,6 @@ def main(argv: list[str] | None = None) -> int:
         return launch()
     if args.command == "dji-probe":
         return _run_dji_probe(args)
+    if args.command == "geotiff-probe":
+        return _run_geotiff_probe(args)
     return 2
