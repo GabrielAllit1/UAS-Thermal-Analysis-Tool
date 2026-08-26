@@ -144,13 +144,22 @@ def _radiometric_classification(
     scale_tag = _tag_value(tags, _SCALE_KEYS)
     offset_tag = _tag_value(tags, _OFFSET_KEYS)
     explicit_radiometry = any(value is not None for value in (unit_tag, scale_tag, offset_tag))
-    display_like = count >= 3 and dtype.lower() in {"uint8", "int8"}
+    dtype_name = dtype.lower()
+    is_8bit = dtype_name in {"uint8", "int8"}
 
     reasons: list[str] = []
     if is_calibrated is False:
         reasons.append("metadata declares isCalibrated=False")
-    if display_like and not explicit_radiometry:
-        reasons.append("multi-band 8-bit raster looks like rendered imagery rather than scalar temperature data")
+    if is_8bit and not explicit_radiometry:
+        if count >= 3:
+            reasons.append(
+                "multi-band 8-bit raster looks like rendered imagery rather than scalar temperature data"
+            )
+        else:
+            reasons.append(
+                "8-bit scalar raster lacks explicit thermal unit/scale/offset metadata; refusing "
+                "to infer temperature from ambiguous display-like values"
+            )
 
     radiometric_candidate = not reasons
     requires_tiled_processing = pixel_count > _MAX_IN_MEMORY_PIXELS
