@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("rasterio")
-
 from uas_thermal.application.mission_intake import scan_mission_folder
 from uas_thermal.application.projects import Project
 from uas_thermal.application.universal_pipeline import UniversalProcessingPlan, UniversalThermalProcessor
 from uas_thermal.sensors.generic import GenericGeoTiffAdapter
 from uas_thermal.validation.demo_mission import bundled_demo_blueprint, materialize_demo_mission
+
+pytest.importorskip("rasterio")
 
 
 def test_demo_materializes_as_quantitative_photovoltaic_mission(tmp_path):
@@ -31,6 +31,18 @@ def test_demo_materializes_as_quantitative_photovoltaic_mission(tmp_path):
         assert diagnostics["count"] == 1
         assert diagnostics["dtype"] == "float32"
         assert diagnostics["crs"] is not None
+        assert "UAS Thermal Demo Grid" in diagnostics["crs"]
+
+
+def test_demo_uses_self_contained_local_crs_instead_of_epsg_authority_lookup(tmp_path):
+    blueprint = bundled_demo_blueprint()
+    assert not str(blueprint["crs"]).upper().startswith("EPSG:")
+    assert "LOCAL_CS" in str(blueprint["crs_wkt"])
+
+    root = materialize_demo_mission(tmp_path / "authority-independent")
+    intake = scan_mission_folder(root)
+    assert intake.ready
+    assert len(intake.analysis_sources) == 4
 
 
 def test_demo_runs_deterministic_stitch_analysis_and_deliverable(tmp_path):

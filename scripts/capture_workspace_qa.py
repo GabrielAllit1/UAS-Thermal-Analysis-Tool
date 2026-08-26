@@ -7,11 +7,11 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from uas_thermal.application.desktop import DesktopSession
-from uas_thermal.application.workspace_ui_v8 import create_workspace_window
+from uas_thermal.application.workspace_ui_v10 import create_workspace_window
 
 
 SIZES = ((1024, 600), (1366, 768), (1440, 900), (1920, 1080))
-PAGES = ("Autopilot", "Overview", "Explore", "Findings", "Measurements", "Settings")
+PAGES = ("Autopilot", "Overview", "Explore", "Findings", "Reports", "Settings")
 
 
 def main(argv: list[str] | None = None) -> int:

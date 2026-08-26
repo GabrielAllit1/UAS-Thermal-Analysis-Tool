@@ -57,8 +57,11 @@ jobs:
           tests/test_demo_mission.py
           tests/test_demo_workspace.py
           tests/test_frontier_responsive_workspace.py
+          tests/test_consumer_workspace.py
       - run: python scripts/smoke_workspace.py
+      - run: python scripts/smoke_guided_demo.py
       - run: python scripts/capture_workspace_qa.py --output-dir build/ui-qa
+      - run: python scripts/capture_guided_result_qa.py --output-dir build/ui-qa
       - uses: actions/upload-artifact@v4
         with:
           name: windows-workspace-visual-qa
