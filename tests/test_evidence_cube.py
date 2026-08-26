@@ -3,10 +3,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-rasterio = pytest.importorskip("rasterio")
-
 from uas_thermal.reporting.evidence_cube import band_manifest, write_frame_evidence_cube
 from uas_thermal.sensors.base import ThermalFrame
+
+rasterio = pytest.importorskip("rasterio")
 
 
 def test_evidence_cube_marks_temperature_as_only_radiometric_authority(tmp_path):
