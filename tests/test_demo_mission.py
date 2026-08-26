@@ -3,13 +3,13 @@ from pathlib import Path
 
 import pytest
 
-rasterio = pytest.importorskip("rasterio")
-
 from uas_thermal.application.mission_intake import scan_mission_folder
 from uas_thermal.application.projects import Project
 from uas_thermal.application.universal_pipeline import UniversalProcessingPlan, UniversalThermalProcessor
 from uas_thermal.sensors.generic import GenericGeoTiffAdapter
 from uas_thermal.validation.demo_mission import bundled_demo_blueprint, materialize_demo_mission
+
+rasterio = pytest.importorskip("rasterio")
 
 
 def test_demo_materializes_as_quantitative_photovoltaic_mission(tmp_path):
