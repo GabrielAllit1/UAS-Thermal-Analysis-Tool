@@ -17,10 +17,20 @@ def create_workspace_window(session):
     app, window = create_v9_workspace(session)
 
     launch = window.findChild(QFrame, "launchSurface")
-    primary = window.findChild(QPushButton, "consumerPrimary")
-    secondary = window.findChild(QPushButton, "consumerSecondary")
-    if launch is None or launch.layout() is None or primary is None or secondary is None:
+    if launch is None or launch.layout() is None:
         raise RuntimeError("Consumer mission launch surface is incomplete")
+
+    launch_buttons = launch.findChildren(QPushButton)
+    primary = next(
+        (button for button in launch_buttons if button.text() == "Choose mission folder"),
+        None,
+    )
+    secondary = next(
+        (button for button in launch_buttons if button.text() == "Run guided example"),
+        None,
+    )
+    if primary is None or secondary is None:
+        raise RuntimeError("Consumer mission launch actions are incomplete")
 
     layout = launch.layout()
     layout.removeWidget(primary)
