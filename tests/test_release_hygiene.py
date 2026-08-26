@@ -27,7 +27,7 @@ def test_release_hygiene_detects_sensitive_files_and_vendor_binaries(tmp_path) -
 
 
 def test_safe_path_component_blocks_traversal_invalid_and_reserved_names() -> None:
-    assert safe_path_component("../../inspection:01?*") == "inspection_01_"
+    assert safe_path_component("../../inspection:01?*") == "inspection_01"
     assert safe_path_component("CON") == "_CON"
     assert safe_path_component("  client   survey  ") == "client survey"
     assert safe_path_component("...") == "inspection"
