@@ -42,9 +42,10 @@ def safe_path_component(value: object, *, fallback: str = "inspection", max_leng
         raise ValueError("max_length must be positive")
     normalized = unicodedata.normalize("NFKC", str(value or "")).strip()
     normalized = _INVALID_PATH_CHARS.sub("_", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).strip(" .")
-    normalized = re.sub(r"_+", "_", normalized)
-    if normalized in {"", ".", ".."}:
+    normalized = re.sub(r"\.{2,}", "_", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"_+", "_", normalized).strip(" ._")
+    if not normalized:
         normalized = fallback
 
     stem = normalized.split(".", 1)[0].upper()
