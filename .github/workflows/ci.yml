@@ -27,6 +27,25 @@ jobs:
       - run: pytest
       - run: ruff check src tests scripts
 
+  package-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -U pip build
+      - run: python -m build
+      - run: python -m pip install --force-reinstall dist/*.whl
+      - run: python -m pip check
+      - name: Smoke installed wheel outside source tree
+        working-directory: build
+        run: |
+          python -m uas_thermal info
+          uas-thermal info
+          python -c "from uas_thermal.api import run_inspection; print(run_inspection.__name__)"
+
   windows-desktop-smoke:
     runs-on: windows-latest
     env:
