@@ -13,7 +13,16 @@ _TILE_SIZE = 48
 _PIXEL_SIZE_M = 0.5
 _ORIGIN_X = 500_000.0
 _ORIGIN_Y = 3_100_000.0
-_CRS = "EPSG:32617"
+_CRS_LABEL = "LOCAL:UAS-Thermal-Demo-Grid"
+# Deliberately self-contained. The guided demo must work even when a user's PROJ authority database
+# is unavailable or shadowed by another GIS installation. No EPSG lookup is required to parse this WKT.
+_CRS_WKT = (
+    'LOCAL_CS["UAS Thermal Demo Grid",'
+    'LOCAL_DATUM["Synthetic Local Datum",32767],'
+    'UNIT["metre",1],'
+    'AXIS["Easting",EAST],'
+    'AXIS["Northing",NORTH]]'
+)
 
 
 def bundled_demo_blueprint() -> dict[str, object]:
@@ -24,7 +33,8 @@ def bundled_demo_blueprint() -> dict[str, object]:
         "name": "Solar Farm Demo",
         "synthetic": True,
         "profile_hint": "photovoltaic",
-        "crs": _CRS,
+        "crs": _CRS_LABEL,
+        "crs_wkt": _CRS_WKT,
         "temperature_unit": "celsius",
         "pixel_size_m": _PIXEL_SIZE_M,
         "tile_size_px": _TILE_SIZE,
@@ -119,7 +129,7 @@ def _write_context_geojson(root: Path) -> None:
     boundary = {
         "type": "FeatureCollection",
         "name": "Synthetic demo boundary",
-        "crs": {"type": "name", "properties": {"name": _CRS}},
+        "properties": {"coordinate_system": _CRS_LABEL},
         "features": [
             {
                 "type": "Feature",
@@ -137,7 +147,7 @@ def _write_context_geojson(root: Path) -> None:
     flight = {
         "type": "FeatureCollection",
         "name": "Synthetic demo flight path",
-        "crs": {"type": "name", "properties": {"name": _CRS}},
+        "properties": {"coordinate_system": _CRS_LABEL},
         "features": [
             {
                 "type": "Feature",
@@ -159,6 +169,24 @@ def _write_context_geojson(root: Path) -> None:
     )
 
 
+def _validate_generated_tile(path: Path) -> None:
+    """Fail the guided mission early if its own synthetic source contract is broken."""
+
+    import rasterio
+
+    with rasterio.open(path) as dataset:
+        tags = dataset.tags()
+        if dataset.count != 1 or dataset.dtypes[0] != "float32":
+            raise RuntimeError(f"Guided demo generated an invalid thermal raster: {path.name}")
+        if dataset.crs is None:
+            raise RuntimeError(f"Guided demo generated a thermal raster without a CRS: {path.name}")
+        if str(tags.get("isCalibrated", "")).lower() != "true":
+            raise RuntimeError(f"Guided demo generated an uncalibrated thermal raster: {path.name}")
+        sample = dataset.read(1, masked=True)
+        if sample.count() == 0:
+            raise RuntimeError(f"Guided demo generated a thermal raster with no valid pixels: {path.name}")
+
+
 def materialize_demo_mission(output_root: str | Path | None = None) -> Path:
     """Create a small deterministic radiometric mission for one-click learning/acceptance tests.
 
@@ -168,6 +196,7 @@ def materialize_demo_mission(output_root: str | Path | None = None) -> Path:
 
     try:
         import rasterio
+        from rasterio.crs import CRS
         from rasterio.transform import from_origin
     except ImportError as exc:
         raise RuntimeError(
@@ -187,6 +216,14 @@ def materialize_demo_mission(output_root: str | Path | None = None) -> Path:
     for directory in (thermal_dir, context_dir, gis_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
+    try:
+        demo_crs = CRS.from_wkt(_CRS_WKT)
+    except Exception as exc:
+        raise RuntimeError(
+            "The guided demo could not initialize its self-contained local coordinate system. "
+            "This is an application/runtime issue rather than a problem with your mission data."
+        ) from exc
+
     tags = {
         "THERMAL_UNIT": "celsius",
         "THERMAL_SCALE": "1.0",
@@ -195,9 +232,11 @@ def materialize_demo_mission(output_root: str | Path | None = None) -> Path:
         "DEMO_DATA": "true",
         "DATASET": _DEMO_NAME,
         "SENSOR": "Synthetic Radiometric Thermal",
+        "COORDINATE_SYSTEM": _CRS_LABEL,
         "acquisitionStartDate": "2026-08-25T14:00:00Z",
         "acquisitionEndDate": "2026-08-25T14:05:00Z",
     }
+    generated: list[Path] = []
     for (row, col), values in _temperature_tiles().items():
         west = _ORIGIN_X + col * _TILE_SIZE * _PIXEL_SIZE_M
         north = _ORIGIN_Y - row * _TILE_SIZE * _PIXEL_SIZE_M
@@ -210,12 +249,17 @@ def materialize_demo_mission(output_root: str | Path | None = None) -> Path:
             width=_TILE_SIZE,
             count=1,
             dtype="float32",
-            crs=_CRS,
+            crs=demo_crs,
             transform=from_origin(west, north, _PIXEL_SIZE_M, _PIXEL_SIZE_M),
             nodata=np.nan,
         ) as dataset:
             dataset.write(values, 1)
             dataset.update_tags(**tags)
+        _validate_generated_tile(destination)
+        generated.append(destination)
+
+    if len(generated) != 4:
+        raise RuntimeError("Guided demo did not generate the expected four radiometric tiles")
 
     _write_context_png(context_dir / "site_overview.png")
     _write_context_geojson(root)
