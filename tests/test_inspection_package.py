@@ -39,12 +39,18 @@ def test_orchestrator_writes_traceable_inspection_package(tmp_path):
     root = tmp_path / "I-900"
     assert run.package_dir == root
     assert (root / "report" / "inspection_report.pdf").is_file()
+    assert (root / "report" / "engineering_evidence_appendix.json").is_file()
+    assert (root / "report" / "engineering_evidence_appendix.md").is_file()
     assert (root / "data" / "findings.csv").is_file()
     assert (root / "data" / "findings.json").is_file()
     assert (root / "findings" / "A-001" / "annotated_thermal.png").is_file()
     assert (root / "findings" / "A-001" / "thermal_crop.png").is_file()
     assert (root / "findings" / "A-001" / "finding_plate.png").is_file()
     manifest = json.loads((root / "inspection_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "1.1"
     assert "report/inspection_report.pdf" in manifest["files"]
+    assert "report/engineering_evidence_appendix.json" in manifest["files"]
     assert manifest["summary"]["canonical_findings"] == 1
+    assert manifest["thermal_evidence"]["bands"][0]["authority"] == "radiometric"
+    assert manifest["thermal_evidence"]["bands"][1]["authority"] == "derived"
     assert "not thermographer certification" in manifest["claim_boundary"]
