@@ -15,7 +15,7 @@ class EvidenceConfig:
     minimum_scale_support: int = 1
 
     @classmethod
-    def from_profile(cls, profile) -> "EvidenceConfig":
+    def from_profile(cls, profile) -> EvidenceConfig:
         return cls(
             minimum_delta_c=float(profile.minimum_delta_c),
             absolute_threshold_c=profile.absolute_threshold_c,
