@@ -42,3 +42,19 @@ def test_orchestrator_isolates_failed_source_and_returns_canonical_findings():
     assert run.summary.images_discovered == 2
     assert run.summary.images_rejected == 1
     assert run.events[-1].stage is ProcessingStage.COMPLETE
+
+
+def test_orchestrator_fails_when_every_source_is_rejected():
+    workflow = AnalysisWorkflow(AdapterRegistry([FakeAdapter()]))
+    orchestrator = AutonomousInspectionOrchestrator(workflow)
+    run = orchestrator.analyze_inspection(
+        Project(name="Rejected", inspection_id="I-FAIL"),
+        ["bad-1.tif", "bad-2.tif"],
+    )
+
+    assert not run.artifacts
+    assert len(run.failures) == 2
+    assert run.summary.images_rejected == 2
+    assert run.status is ProcessingStage.FAILED
+    assert run.events[-1].stage is ProcessingStage.FAILED
+    assert "all 2 source(s) were rejected" in run.events[-1].message

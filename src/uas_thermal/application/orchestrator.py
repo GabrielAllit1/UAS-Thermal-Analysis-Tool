@@ -213,7 +213,15 @@ class AutonomousInspectionOrchestrator:
             run.status = ProcessingStage.CANCELED
             return run
 
-        if output_dir is not None and run.artifacts:
+        if not run.artifacts:
+            emit(
+                ProcessingStage.FAILED,
+                f"Inspection failed: all {total} source(s) were rejected",
+                0,
+            )
+            return run
+
+        if output_dir is not None:
             emit(
                 ProcessingStage.RENDERING,
                 "Rendering finding annotations and evidence plates",

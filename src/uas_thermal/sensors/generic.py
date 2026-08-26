@@ -35,6 +35,10 @@ def _parse_bool(value: object) -> bool | None:
     return None
 
 
+def _configured_radiometry(scale: float, offset: float, unit: str) -> bool:
+    return unit.strip().lower() != "auto" or float(scale) != 1.0 or float(offset) != 0.0
+
+
 def masked_band_to_float(values: np.ndarray) -> np.ndarray:
     """Convert a masked raster band to float32 while preserving nodata as NaN."""
 
@@ -137,20 +141,32 @@ def _radiometric_classification(
     count: int,
     dtype: str,
     pixel_count: int,
+    configured_radiometry: bool = False,
 ) -> dict[str, object]:
     normalized = {str(key).upper(): str(value) for key, value in tags.items()}
     is_calibrated = _parse_bool(normalized.get("ISCALIBRATED"))
     unit_tag = _tag_value(tags, _UNIT_KEYS)
     scale_tag = _tag_value(tags, _SCALE_KEYS)
     offset_tag = _tag_value(tags, _OFFSET_KEYS)
-    explicit_radiometry = any(value is not None for value in (unit_tag, scale_tag, offset_tag))
-    display_like = count >= 3 and dtype.lower() in {"uint8", "int8"}
+    explicit_radiometry = configured_radiometry or any(
+        value is not None for value in (unit_tag, scale_tag, offset_tag)
+    )
+    dtype_name = dtype.lower()
+    is_8bit = dtype_name in {"uint8", "int8"}
 
     reasons: list[str] = []
     if is_calibrated is False:
         reasons.append("metadata declares isCalibrated=False")
-    if display_like and not explicit_radiometry:
-        reasons.append("multi-band 8-bit raster looks like rendered imagery rather than scalar temperature data")
+    if is_8bit and not explicit_radiometry:
+        if count >= 3:
+            reasons.append(
+                "multi-band 8-bit raster looks like rendered imagery rather than scalar temperature data"
+            )
+        else:
+            reasons.append(
+                "8-bit scalar raster lacks explicit thermal unit/scale/offset metadata; refusing "
+                "to infer temperature from ambiguous display-like values"
+            )
 
     radiometric_candidate = not reasons
     requires_tiled_processing = pixel_count > _MAX_IN_MEMORY_PIXELS
@@ -188,6 +204,10 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
         self.offset = offset
         self.unit = unit
 
+    @property
+    def has_configured_radiometry(self) -> bool:
+        return _configured_radiometry(self.scale, self.offset, self.unit)
+
     def can_read(self, path: Path) -> bool:
         return path.suffix.lower() in {".tif", ".tiff"}
 
@@ -212,6 +232,7 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
                 count=source.count,
                 dtype=str(source.dtypes[0]),
                 pixel_count=pixel_count,
+                configured_radiometry=self.has_configured_radiometry,
             )
             return {
                 "driver": source.driver,
@@ -249,6 +270,7 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
                 count=source.count,
                 dtype=str(source.dtypes[0]),
                 pixel_count=int(source.width) * int(source.height),
+                configured_radiometry=self.has_configured_radiometry,
             )
             if not classification["radiometric_candidate"]:
                 reasons = "; ".join(classification["radiometric_reasons"])
@@ -286,6 +308,7 @@ class GenericGeoTiffAdapter(ThermalSensorAdapter):
                 count=source.count,
                 dtype=str(source.dtypes[0]),
                 pixel_count=pixel_count,
+                configured_radiometry=self.has_configured_radiometry,
             )
             if not classification["radiometric_candidate"]:
                 reasons = "; ".join(classification["radiometric_reasons"])

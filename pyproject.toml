@@ -20,6 +20,7 @@ vision = ["opencv-python>=4.9", "scikit-image>=0.22", "exifread>=3.0"]
 reporting = ["reportlab>=4.0", "Pillow>=10.0"]
 dji = ["opencv-python>=4.9"]
 dev = [
+  "build>=1.2",
   "pytest>=8.0",
   "pytest-cov>=5.0",
   "ruff>=0.6",
