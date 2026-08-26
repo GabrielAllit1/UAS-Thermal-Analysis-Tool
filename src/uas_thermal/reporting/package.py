@@ -4,9 +4,12 @@ from dataclasses import asdict
 from hashlib import sha256
 import json
 from pathlib import Path
+import shutil
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from ..inspections.models import InspectionResult
+from ..platform.packaging import safe_path_component
 from ..thermal.statistics import TemperatureStatistics
 from .annotations import write_finding_evidence
 from .csv_report import write_findings_csv
@@ -114,8 +117,7 @@ def _write_engineering_evidence_appendix(
     return json_path, markdown_path
 
 
-def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path:
-    root = Path(output_dir) / (run.project.inspection_id or run.project.project_id or "inspection")
+def _write_package_tree(run: InspectionRun, root: Path) -> None:
     report_dir = root / "report"
     findings_dir = root / "findings"
     annotated_dir = root / "annotated"
@@ -130,12 +132,13 @@ def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path
         for artifact in run.artifacts
     }
     for finding in run.canonical_findings:
-        finding_dir = findings_dir / (finding.finding_id or "finding")
+        finding_name = safe_path_component(finding.finding_id or "finding", fallback="finding")
+        finding_dir = findings_dir / finding_name
         finding_dir.mkdir(parents=True, exist_ok=True)
         artifact = artifact_by_source.get(str(Path(finding.source_path)))
         if artifact is not None:
             evidence = write_finding_evidence(artifact.frame, finding, finding_dir)
-            overview_copy = annotated_dir / f"{finding.finding_id or 'finding'}.png"
+            overview_copy = annotated_dir / f"{finding_name}.png"
             overview_copy.write_bytes(evidence["annotated"].read_bytes())
         (finding_dir / "finding.json").write_text(
             json.dumps(finding_payload(finding), indent=2, sort_keys=True),
@@ -145,7 +148,7 @@ def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path
     evidence_cubes: list[dict[str, object]] = []
     for index, artifact in enumerate(run.artifacts, 1):
         source = str(Path(artifact.result.source))
-        stem = Path(source).stem or "thermal"
+        stem = safe_path_component(Path(source).stem, fallback="thermal")
         cube_path = evidence_dir / f"{index:03d}_{stem}_thermal_evidence.tif"
         try:
             cube = write_artifact_evidence_cube(artifact, run.profile, cube_path)
@@ -243,4 +246,39 @@ def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path
     }
     manifest_path = root / "inspection_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
-    return root
+
+
+def _promote_staging_package(staging: Path, destination: Path) -> None:
+    backup: Path | None = None
+    if destination.exists():
+        backup = destination.parent / f".{destination.name}.previous-{uuid4().hex}"
+        destination.rename(backup)
+    try:
+        staging.rename(destination)
+    except Exception:
+        if backup is not None and backup.exists() and not destination.exists():
+            backup.rename(destination)
+        raise
+    else:
+        if backup is not None:
+            shutil.rmtree(backup, ignore_errors=True)
+
+
+def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path:
+    output_root = Path(output_dir).expanduser()
+    output_root.mkdir(parents=True, exist_ok=True)
+    package_name = safe_path_component(
+        run.project.inspection_id or run.project.project_id or "inspection",
+        fallback="inspection",
+    )
+    destination = output_root / package_name
+    staging = output_root / f".{package_name}.staging-{uuid4().hex}"
+
+    try:
+        _write_package_tree(run, staging)
+        _promote_staging_package(staging, destination)
+    except Exception:
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return destination
