@@ -8,10 +8,10 @@ pytest.importorskip("PyQt5")
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage
-from PyQt5.QtWidgets import QLabel, QPushButton, QScrollArea
+from PyQt5.QtWidgets import QFrame, QLabel, QPushButton, QScrollArea
 
 from uas_thermal.application.desktop import DesktopSession
-from uas_thermal.application.workspace_ui_v9 import create_workspace_window
+from uas_thermal.application.workspace_ui_v10 import create_workspace_window
 
 
 def _close(app, window):
@@ -43,6 +43,15 @@ def test_consumer_home_is_simple_and_laptop_safe():
     assert "Choose mission folder" in buttons
     assert "Run guided example" in buttons
     assert "Advanced tools" in buttons
+
+    launch = window.findChild(QFrame, "launchSurface")
+    assert launch is not None
+    assert window.consumer_launch_actions_stacked is True
+    primary = buttons["Choose mission folder"]
+    secondary = buttons["Run guided example"]
+    assert primary.geometry().left() == secondary.geometry().left()
+    assert primary.geometry().right() <= launch.contentsRect().right()
+    assert secondary.geometry().right() <= launch.contentsRect().right()
 
     _close(app, window)
 
