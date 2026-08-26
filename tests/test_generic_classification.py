@@ -15,6 +15,29 @@ def test_uncalibrated_multiband_uint8_is_not_radiometric() -> None:
     assert "isCalibrated=False" in result["radiometric_reasons"][0]
 
 
+def test_untagged_single_band_uint8_is_rejected_as_ambiguous() -> None:
+    result = _radiometric_classification(
+        tags={},
+        count=1,
+        dtype="uint8",
+        pixel_count=640 * 512,
+    )
+
+    assert result["radiometric_candidate"] is False
+    assert any("8-bit scalar raster" in reason for reason in result["radiometric_reasons"])
+
+
+def test_explicitly_encoded_single_band_uint8_can_be_radiometric() -> None:
+    result = _radiometric_classification(
+        tags={"THERMAL_UNIT": "celsius"},
+        count=1,
+        dtype="uint8",
+        pixel_count=640 * 512,
+    )
+
+    assert result["radiometric_candidate"] is True
+
+
 def test_large_single_band_temperature_raster_requires_tiling() -> None:
     result = _radiometric_classification(
         tags={"THERMAL_UNIT": "kelvin", "isCalibrated": "True"},
