@@ -129,7 +129,7 @@ def _write_arrays(destination, layers, *, window=None, core_slice=None) -> None:
 
 
 def write_frame_evidence_cube(
-    frame: "ThermalFrame",
+    frame: ThermalFrame,
     findings,
     path: str | Path,
     *,
@@ -157,7 +157,7 @@ def write_frame_evidence_cube(
     )
 
 
-def _calibration_from_frame(frame: "ThermalFrame"):
+def _calibration_from_frame(frame: ThermalFrame):
     from ..thermal.calibration import ThermalCalibration
 
     payload = frame.metadata.get("calibration", {})
@@ -178,7 +178,7 @@ def _calibration_from_frame(frame: "ThermalFrame"):
 
 
 def _write_tiled_generic_cube(
-    artifact: "AnalysisArtifact",
+    artifact: AnalysisArtifact,
     path: Path,
     *,
     config: EvidenceConfig,
@@ -251,8 +251,8 @@ def _write_tiled_generic_cube(
 
 
 def write_artifact_evidence_cube(
-    artifact: "AnalysisArtifact",
-    profile: "InspectionProfile",
+    artifact: AnalysisArtifact,
+    profile: InspectionProfile,
     path: str | Path,
 ) -> EvidenceCubeResult:
     """Export one traceable evidence cube without changing canonical thermal analysis."""
