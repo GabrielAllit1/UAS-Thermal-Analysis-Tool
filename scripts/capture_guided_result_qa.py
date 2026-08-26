@@ -11,7 +11,7 @@ from uas_thermal.application.desktop import DesktopSession
 from uas_thermal.application.mission_intake import scan_mission_folder
 from uas_thermal.application.projects import Project
 from uas_thermal.application.universal_pipeline import UniversalProcessingPlan, UniversalThermalProcessor
-from uas_thermal.application.workspace_ui_v9 import create_workspace_window
+from uas_thermal.application.workspace_ui_v10 import create_workspace_window
 from uas_thermal.validation.demo_mission import materialize_demo_mission
 
 
