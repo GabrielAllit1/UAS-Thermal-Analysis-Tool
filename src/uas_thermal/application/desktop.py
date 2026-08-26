@@ -88,7 +88,7 @@ class DesktopSession:
 
 
 def launch() -> int:
-    from .workspace_ui_v8 import launch_workspace
+    from .workspace_ui_v9 import launch_workspace
 
     return launch_workspace(DesktopSession())
 
