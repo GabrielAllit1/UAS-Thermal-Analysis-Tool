@@ -10,6 +10,7 @@ from ..inspections.models import InspectionResult
 from ..thermal.statistics import TemperatureStatistics
 from .annotations import write_finding_evidence
 from .csv_report import write_findings_csv
+from .evidence_cube import band_manifest, write_artifact_evidence_cube
 from .geojson_report import write_geojson
 from .json_report import finding_payload, write_findings_json
 from .kml_report import write_findings_kml
@@ -47,14 +48,81 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _write_engineering_evidence_appendix(
+    report_dir: Path,
+    *,
+    evidence_cubes: list[dict[str, object]],
+) -> tuple[Path, Path]:
+    bands = band_manifest()
+    payload = {
+        "schema_version": "1.0",
+        "title": "Thermal Evidence Cube Engineering Appendix",
+        "authority_boundary": (
+            "Band 1 is decoded Celsius radiometry. Bands 2-9 are deterministic derived evidence. "
+            "Experimental residual bands do not alter finding identity, temperature, severity, "
+            "confidence, or geolocation."
+        ),
+        "bands": bands,
+        "cubes": evidence_cubes,
+        "illumination_context": {
+            "status": "supplemental-api-only",
+            "note": (
+                "RGB illumination/shadow context is available as a supplemental computation but is not "
+                "registered into pixel-level finding evidence until an authoritative thermal-visible "
+                "registration exists."
+            ),
+        },
+    }
+    json_path = report_dir / "engineering_evidence_appendix.json"
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    lines = [
+        "# Thermal Evidence Cube Engineering Appendix",
+        "",
+        payload["authority_boundary"],
+        "",
+        "## Band contract",
+        "",
+        "| Band | Name | Unit | Authority | Experimental |",
+        "|---:|---|---|---|---|",
+    ]
+    for band in bands:
+        lines.append(
+            f"| {band['band']} | {band['name']} | {band['unit']} | "
+            f"{band['authority']} | {str(band['experimental']).lower()} |"
+        )
+    lines.extend(["", "## Generated cubes", ""])
+    if evidence_cubes:
+        for cube in evidence_cubes:
+            lines.append(
+                f"- `{cube.get('source', '')}`: {cube.get('status', 'unknown')}"
+                + (f" -> `{cube.get('path')}`" if cube.get("path") else "")
+            )
+    else:
+        lines.append("- No accepted radiometric artifacts were available for evidence export.")
+    lines.extend(
+        [
+            "",
+            "## Claim boundary",
+            "",
+            "Derived evidence supports inspection review; it is not an independent temperature "
+            "measurement, defect proof, standards certification, or thermographer certification.",
+        ]
+    )
+    markdown_path = report_dir / "engineering_evidence_appendix.md"
+    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return json_path, markdown_path
+
+
 def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path:
     root = Path(output_dir) / (run.project.inspection_id or run.project.project_id or "inspection")
     report_dir = root / "report"
     findings_dir = root / "findings"
     annotated_dir = root / "annotated"
     maps_dir = root / "maps"
+    evidence_dir = maps_dir / "evidence"
     data_dir = root / "data"
-    for directory in (report_dir, findings_dir, annotated_dir, maps_dir, data_dir):
+    for directory in (report_dir, findings_dir, annotated_dir, maps_dir, evidence_dir, data_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
     artifact_by_source = {
@@ -73,6 +141,31 @@ def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path
             json.dumps(finding_payload(finding), indent=2, sort_keys=True),
             encoding="utf-8",
         )
+
+    evidence_cubes: list[dict[str, object]] = []
+    for index, artifact in enumerate(run.artifacts, 1):
+        source = str(Path(artifact.result.source))
+        stem = Path(source).stem or "thermal"
+        cube_path = evidence_dir / f"{index:03d}_{stem}_thermal_evidence.tif"
+        try:
+            cube = write_artifact_evidence_cube(artifact, run.profile, cube_path)
+        except Exception as exc:
+            evidence_cubes.append(
+                {
+                    "source": source,
+                    "status": "unavailable",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
+        else:
+            cube_payload = cube.as_dict()
+            cube_payload["path"] = str(cube.path.relative_to(root)).replace("\\", "/")
+            cube_payload["source"] = source
+            cube_payload["status"] = "written"
+            evidence_cubes.append(cube_payload)
+
+    _write_engineering_evidence_appendix(report_dir, evidence_cubes=evidence_cubes)
 
     project_metadata = run.project.report_metadata()
     summary_payload = asdict(run.summary)
@@ -108,6 +201,8 @@ def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path
                 "Inspection-level median/stddev/p95 are weighted summaries of per-frame statistics; "
                 "finding temperatures remain source-frame quantitative values."
             ),
+            "thermal_evidence_cubes": evidence_cubes,
+            "thermal_evidence_band_manifest": band_manifest(),
         },
         project=project_metadata,
         profile=run.profile.as_dict(),
@@ -124,15 +219,20 @@ def write_inspection_package(run: InspectionRun, output_dir: str | Path) -> Path
 
     files = [path for path in root.rglob("*") if path.is_file()]
     manifest = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "project": project_metadata,
         "profile": run.profile.as_dict(),
         "summary": summary_payload,
         "claim_boundary": (
             "Automated thermal analysis and anomaly classification generated by UAS Thermal Analysis; "
-            "this package is not thermographer certification."
+            "this package is not thermographer certification. Evidence cube band 1 preserves decoded "
+            "Celsius radiometry while all other evidence bands are derived."
         ),
         "failures": [asdict(item) for item in run.failures],
+        "thermal_evidence": {
+            "bands": band_manifest(),
+            "cubes": evidence_cubes,
+        },
         "files": {
             str(path.relative_to(root)).replace("\\", "/"): {
                 "sha256": _hash_file(path),
