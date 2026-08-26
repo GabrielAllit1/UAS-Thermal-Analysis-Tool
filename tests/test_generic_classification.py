@@ -1,4 +1,4 @@
-from uas_thermal.sensors.generic import _radiometric_classification
+from uas_thermal.sensors.generic import GenericGeoTiffAdapter, _radiometric_classification
 
 
 def test_uncalibrated_multiband_uint8_is_not_radiometric() -> None:
@@ -35,6 +35,20 @@ def test_explicitly_encoded_single_band_uint8_can_be_radiometric() -> None:
         pixel_count=640 * 512,
     )
 
+    assert result["radiometric_candidate"] is True
+
+
+def test_explicit_adapter_configuration_can_authorize_untagged_uint8() -> None:
+    adapter = GenericGeoTiffAdapter(unit="celsius")
+    result = _radiometric_classification(
+        tags={},
+        count=1,
+        dtype="uint8",
+        pixel_count=640 * 512,
+        configured_radiometry=adapter.has_configured_radiometry,
+    )
+
+    assert adapter.has_configured_radiometry is True
     assert result["radiometric_candidate"] is True
 
 
