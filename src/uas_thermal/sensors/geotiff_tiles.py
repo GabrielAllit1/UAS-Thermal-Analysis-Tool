@@ -114,6 +114,7 @@ class TiledGeoTiffReader:
                 count=source.count,
                 dtype=str(source.dtypes[0]),
                 pixel_count=int(source.width) * int(source.height),
+                configured_radiometry=self.adapter.has_configured_radiometry,
             )
             if not classification["radiometric_candidate"]:
                 reasons = "; ".join(classification["radiometric_reasons"])
@@ -160,6 +161,7 @@ class TiledGeoTiffReader:
                 count=source.count,
                 dtype=str(source.dtypes[0]),
                 pixel_count=int(source.width) * int(source.height),
+                configured_radiometry=self.adapter.has_configured_radiometry,
             )
             if not classification["radiometric_candidate"]:
                 reasons = "; ".join(classification["radiometric_reasons"])
