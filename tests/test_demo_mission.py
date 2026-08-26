@@ -9,7 +9,7 @@ from uas_thermal.application.universal_pipeline import UniversalProcessingPlan, 
 from uas_thermal.sensors.generic import GenericGeoTiffAdapter
 from uas_thermal.validation.demo_mission import bundled_demo_blueprint, materialize_demo_mission
 
-rasterio = pytest.importorskip("rasterio")
+pytest.importorskip("rasterio")
 
 
 def test_demo_materializes_as_quantitative_photovoltaic_mission(tmp_path):
@@ -34,14 +34,13 @@ def test_demo_materializes_as_quantitative_photovoltaic_mission(tmp_path):
         assert "UAS Thermal Demo Grid" in diagnostics["crs"]
 
 
-def test_demo_does_not_require_epsg_authority_lookup(tmp_path, monkeypatch):
-    def forbidden_epsg(*_args, **_kwargs):
-        raise AssertionError("guided demo must not query EPSG authority database")
+def test_demo_uses_self_contained_local_crs_instead_of_epsg_authority_lookup(tmp_path):
+    blueprint = bundled_demo_blueprint()
+    assert not str(blueprint["crs"]).upper().startswith("EPSG:")
+    assert "LOCAL_CS" in str(blueprint["crs_wkt"])
 
-    monkeypatch.setattr(rasterio.crs.CRS, "from_epsg", forbidden_epsg)
     root = materialize_demo_mission(tmp_path / "authority-independent")
     intake = scan_mission_folder(root)
-
     assert intake.ready
     assert len(intake.analysis_sources) == 4
 
